@@ -4,7 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
 #include <dirent.h>
+#include <errno.h>
 int end = 0;
 
 void sigint_handler(int signo)
@@ -13,33 +16,49 @@ void sigint_handler(int signo)
 	printf("Are you sure you want to terminate(Y/N)? ");
 	scanf("%s",answer);
 	if(*answer == 'Y' || *answer == 'y')
-		end = 1;	
+            end = 1;	
 }
-/* FAZER FORK E DENTRO DE CADA FORK FAZER OPENDIR DO RESPECTIVO DIRETÓRIO*/
-void find_function(int argc, char const *argv[]){
-	if(argc == 1){ //go through all the directiories in the actual directory
-
-	}
-	else {
-		DIR *d = opendir("~");
-		struct dirent *dir(d); 
-		printf("BOTA\n");
-		
-		printf("BOTA2\n");
-		//readdir_r(d, dir, &dir);
-		/*printf("BOTA3\n");
-		while(readdir_r(d, dir, &dir)){
-			printf("BOTA4\n");
-			if(strcmp(dir->d_name, argv[2]) != 0){
-				execlp("ls","ls",NULL);
-			}
-		}
-		closedir(d);*/
-
-	}
-
+void find_function(int argc, char const argv[]){
+    DIR *d;
+    struct dirent *dir;
+    pid_t pid;
+    d = opendir(argv);
+    struct stat buf; 
+    if(d == NULL){
+        exit(1);
+    }
+    while((dir = readdir(d)) != NULL){
+        if(strcmp(dir->d_name,".") == 0 || strcmp(dir->d_name,"..") == 0){
+            continue;
+        }
+        char name[200];
+        sprintf(name, "%s/%s", argv, dir->d_name);
+        if(lstat(name, &buf) == -1){
+            fprintf(stderr, "lstat error.\n");
+            exit(1);
+            
+        }
+        if(S_ISDIR(buf.st_mode)){
+            if((pid = fork()) < 0){
+                fprintf(stderr, "Fork error.\n");
+                exit(2);
+            }
+            else if(pid == 0){ //filho
+                find_function(argc, dir->d_name);
+            }
+            else { //pai
+                write(STDOUT_FILENO,dir->d_name,strlen(dir->d_name));
+                write(STDOUT_FILENO,"\n",1);
+                waitpid(pid, 0, 0);   
+            }
+        }
+        else if(S_ISREG(buf.st_mode)){
+            write(STDOUT_FILENO,dir->d_name,strlen(dir->d_name));
+            write(STDOUT_FILENO,"\n",1);
+        }
+    }
+    end = 1;
 }
-
 int main(int argc, char const *argv[])
 {
 	if(argc == 0){
@@ -58,7 +77,7 @@ int main(int argc, char const *argv[])
 	}
 	while(end != 1){ //while there hasn't been an interruption
 		if(strcmp(argv[1],"sfind") == 0){
-			find_function(argc, argv);
+			find_function(argc, argv[2]);
 		}
 		else {
 			fprintf(stderr,"Function not valid.\n");
