@@ -63,11 +63,61 @@ void find_function(char const argv[]){
     }
 }
 
-int find_function_name(char const argv[], char *str, char const filename[]) {
+
+int remove_dir(char const path[]){
     DIR *d;
     struct dirent *dir;
     pid_t pid;
-    char name[200];
+    char *name = (char *)malloc(200 * sizeof(char));
+    d = opendir(path);  
+    if(d == NULL){
+        fprintf(stderr,"Open Dir error.\n");
+        exit(1);
+    }
+    struct stat buf;
+    while((dir = readdir(d)) != NULL){
+
+        sprintf(name, "%s/%s", path, dir->d_name);
+        if(lstat(name, &buf) == -1){
+            perror("Error in lstat");
+            return -1;
+        }
+        if(strcmp(dir->d_name,".") == 0 || strcmp(dir->d_name,"..") == 0 || (dir->d_name[0] == '.')){
+            continue;
+        }
+        if(S_ISDIR(buf.st_mode)){
+            if((pid = fork()) < 0){
+                fprintf(stderr, "Fork error.\n");
+                exit(2);
+            }
+            else if(pid > 0) { //pai
+                waitpid(pid, 0, 0);
+                remove(name);
+            }
+            else if(pid == 0){ //filho
+                if(remove_dir(name) == 1)
+                    return 1;
+            }
+        }
+        else if(S_ISREG(buf.st_mode)){
+            printf("ISREF: %s\n",name);
+            remove(name);
+            return 1;
+        }
+    }
+    end = 1;
+    //remove(name);
+    if (dir == NULL) {
+        exit(0);
+    }
+    return 1;
+}
+
+int find_function_name(char const argv[], char *str, char const filename[], char const func[]) {
+    DIR *d;
+    struct dirent *dir;
+    pid_t pid;
+    char *name = (char *)malloc(200 * sizeof(char));
     d = opendir(argv);  
     if(d == NULL){
         fprintf(stderr,"Open Dir error.\n");
@@ -88,8 +138,16 @@ int find_function_name(char const argv[], char *str, char const filename[]) {
         }
         if(S_ISDIR(buf.st_mode)){
             if(strcmp(dir->d_name,filename) == 0){
-                printf("%s\n",name);
-                return 1;
+                if(strcmp(func,"-print") == 0){    
+                    printf("%s\n",name);
+                    return 1;
+                }
+
+                else if(strcmp(func,"-delete") == 0){
+                    remove_dir(name);
+                    remove(name);
+                    return 1;
+                }
             }
             if((pid = fork()) < 0){
                 fprintf(stderr, "Fork error.\n");
@@ -99,15 +157,22 @@ int find_function_name(char const argv[], char *str, char const filename[]) {
                 waitpid(pid, 0, 0);
             }
             else if(pid == 0){ //filho
-                if(find_function_name(name,str,filename) == 1)
+                if(find_function_name(name,str,filename,func) == 1)
                     return 1;
                 exit(0);
             }
         }
         else if(S_ISREG(buf.st_mode)){
             if(strcmp(dir->d_name,filename) == 0){
-                printf("%s\n",name);
-                return 1;
+                if(strcmp(func,"-print") == 0){    
+                    printf("%s\n",name);
+                    return 1;
+                }
+
+                else if(strcmp(func,"-delete") == 0){
+                    remove(name);
+                    return 1;
+                }
             }
         }
     }
@@ -117,6 +182,7 @@ int find_function_name(char const argv[], char *str, char const filename[]) {
     }
     return 1;
 }
+
 int main(int argc, char const *argv[])
 {
     if(argc == 0){
@@ -143,7 +209,7 @@ int main(int argc, char const *argv[])
             else { //fazer os -name, -type.....
                 if(strcmp(argv[3],"-name") == 0){
                     char *str = (char *)malloc(200*sizeof(char));
-                    find_function_name(argv[2],str,argv[4]);
+                    find_function_name(argv[2],str,argv[4],argv[5]);
                     end = 1;
                 }
                 else if(strcmp(argv[3],"-type") == 0){
