@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <libgen.h>
 #include <errno.h>
 int end = 0;
 
@@ -24,6 +25,7 @@ void find_function(char const argv[]){
     pid_t pid;
     d = opendir(argv);
     struct stat buf;
+    char name[200];
     if(d == NULL){
         exit(1);
     }
@@ -31,7 +33,6 @@ void find_function(char const argv[]){
         if(strcmp(dir->d_name,".") == 0 || strcmp(dir->d_name,"..") == 0){
             continue;
         }
-        char name[200];
         sprintf(name, "%s/%s", argv, dir->d_name);
         if(lstat(name, &buf) == -1){
             fprintf(stderr, "lstat error.\n");
@@ -62,43 +63,51 @@ void find_function(char const argv[]){
     }
 }
 
-void find_function_name(char const argv[], char *str) {
+int find_function_name(char const argv[], char *str, char const filename[]) {
     DIR *d;
     struct dirent *dir;
     pid_t pid;
-    d = opendir(argv);
-    struct stat buf;
+    char name[200];
+    d = opendir(argv);  
     if(d == NULL){
+        fprintf(stderr,"Open Dir error.\n");
         exit(1);
     }
+
+    struct stat buf;
     while((dir = readdir(d)) != NULL){
-        if(strcmp(dir->d_name,".") == 0 || strcmp(dir->d_name,"..") == 0){
-            continue;
-        }
-        char name[200];
+
         sprintf(name, "%s/%s", argv, dir->d_name);
         if(lstat(name, &buf) == -1){
-            fprintf(stderr, "lstat error.\n");
-            exit(1);
+            perror("Error in lstat");
+            return -1;
         }
-        if(S_ISREG(buf.st_mode)){
-            strcat(str,"/");
-            strcat(str,dir->d_name);
-            printf("%s\n",str);
+
+        if(strcmp(dir->d_name,".") == 0 || strcmp(dir->d_name,"..") == 0 || (dir->d_name[0] == '.')){
+            continue;
         }
-        else if(S_ISDIR(buf.st_mode)){
+        if(S_ISDIR(buf.st_mode)){
+            if(strcmp(dir->d_name,filename) == 0){
+                printf("%s\n",name);
+                return 1;
+            }
             if((pid = fork()) < 0){
                 fprintf(stderr, "Fork error.\n");
                 exit(2);
             }
             else if(pid > 0) { //pai
-                strcat(str,"/");
-                strcat(str,dir->d_name);
-                //printf("%s\n",str);
                 waitpid(pid, 0, 0);
             }
             else if(pid == 0){ //filho
-                find_function_name(dir->d_name,str);
+                if(find_function_name(name,str,filename) == 1)
+                    return 1;
+                exit(0);
+            }
+        }
+        else if(S_ISREG(buf.st_mode)){
+            if(strcmp(dir->d_name,filename) == 0){
+                printf("%s\n",name);
+                return 1;
             }
         }
     }
@@ -106,25 +115,25 @@ void find_function_name(char const argv[], char *str) {
     if (dir == NULL) {
         exit(0);
     }
+    return 1;
 }
-
 int main(int argc, char const *argv[])
 {
     if(argc == 0){
         fprintf(stderr,"Invalid number of parameters.\n");
-        exit(1);
+        return -1;
     }
     struct sigaction action;
     action.sa_handler = sigint_handler;
     sigemptyset(&action.sa_mask);
     action.sa_flags = 0;
-    
+
     if(sigaction(SIGINT,&action,NULL) < 0)
     {
         fprintf(stderr,"Unable to install SIGINT handler\n");
-        exit(1);
+        return -1;
     }
-    
+
     //              NÃO É BEM ASSIM, VAI TER DE SER UM CICLO...EU DEPOIS TRATO DISTO 
     while(end != 1){ 
         if(strcmp(argv[1],"sfind") == 0){
@@ -134,8 +143,8 @@ int main(int argc, char const *argv[])
             else { //fazer os -name, -type.....
                 if(strcmp(argv[3],"-name") == 0){
                     char *str = (char *)malloc(200*sizeof(char));
-                    //printf("fazer -name");
-                    find_function_name(argv[2],str);
+                    find_function_name(argv[2],str,argv[4]);
+                    end = 1;
                 }
                 else if(strcmp(argv[3],"-type") == 0){
                     printf("fazer -type");
@@ -154,13 +163,13 @@ int main(int argc, char const *argv[])
                 }
                 else {
                     fprintf(stderr,"Function not valid.\n");
-                    exit(1);
+                    return -1;
                 }
             }
         }
         else {
             fprintf(stderr,"Function not valid.\n");
-            exit(1);
+            return -1;
         }
         if(end == 1)
             break;
