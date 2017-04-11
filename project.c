@@ -22,12 +22,12 @@ void sigint_handler(int signo)
 
 int getPerm(const char *path){
     struct stat ret;
-   
+
     if (stat(path, &ret) == -1) {
         write(STDOUT_FILENO,"Can't Open\n", 11);
         return -1;
     }
-   
+
     return (ret.st_mode & S_IRUSR)|(ret.st_mode & S_IWUSR)|(ret.st_mode & S_IXUSR)|
     (ret.st_mode & S_IRGRP)|(ret.st_mode & S_IWGRP)|(ret.st_mode & S_IXGRP)|
     (ret.st_mode & S_IROTH)|(ret.st_mode & S_IWOTH)|(ret.st_mode & S_IXOTH);
@@ -232,6 +232,61 @@ int find_function_type(char const argv[], char const c[]) {
     return 1;
 }
 
+int find_permission(const char  argv[], const char *permission){
+    DIR *d;
+    struct dirent *dir;
+    pid_t pid;
+    d = opendir(argv);
+    struct stat buf;
+    char name[200];
+    if(d == NULL){
+        exit(1);
+    }
+
+    while((dir = readdir(d)) != NULL){
+        sprintf(name, "%s/%s", argv, dir->d_name);
+        if(lstat(name, &buf) == -1){
+            fprintf(stderr, "lstat error.\n");
+            return -1;
+        }
+        if(strcmp(dir->d_name,".") == 0 || strcmp(dir->d_name,"..") == 0 || (dir->d_name[0] == '.')){
+            //stat(dir->d_name, &buf);
+            continue;
+        }
+        
+        if(S_ISREG(buf.st_mode)){
+            if(atoi(permission)==(buf.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO)))
+            {
+                write(STDOUT_FILENO,name,strlen(name));
+                write(STDOUT_FILENO,"\n",1);
+            }
+            return 1;
+        }
+        else if(S_ISDIR(buf.st_mode)){
+            if((buf.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO))==atoi(permission)){
+                write(STDOUT_FILENO,name,strlen(name));
+                write(STDOUT_FILENO,"\n",1);
+            }
+            if((pid = fork()) < 0){
+                fprintf(stderr, "Fork error.\n");
+                exit(2);
+            }
+            else if(pid > 0) { //pai
+                waitpid(pid, 0, 0);
+            }
+            else if(pid == 0){ //filho
+                find_permission(name, permission);
+                return 1;
+            }
+        }
+    }
+    end = 1;
+    if (dir == NULL) {
+        exit(0);
+    }
+    return 1;
+}
+
 int find_function_name(char const argv[], char const filename[], char const func[]) {
     DIR *d;
     struct dirent *dir;
@@ -339,7 +394,7 @@ int main(int argc, char const *argv[])
                     end = 1;
                 }
                 else if(strcmp(argv[3],"-perm") == 0){
-                    find_function_name(argv[2],argv[4],argv[5]);
+                    find_permission(argv[2],argv[4]);
                     end = 1;
                 }
                 else if (strcmp(argv[5],"-exec") == 0){
