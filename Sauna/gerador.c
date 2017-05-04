@@ -8,22 +8,21 @@
 #include <time.h>
 
 int reqNum = 0;
+unsigned int seed;
 
-int makeRequest(char *max){ //ERRO NO MAX...DÁ NUMEROS MARADOS POR CAUSA DO VOID POINTER EM BAIXO
+/*int makeRequest(char *max){ //ERRO NO MAX...DÁ NUMEROS MARADOS POR CAUSA DO VOID POINTER EM BAIXO
 	srand(time(NULL));		//AINDA NAO CONSEGUI RESOLVER
 	unsigned int seed;
 	int n = (rand_r(&seed) % *max) + 1;
 	printf("%d\n", n);
 	return n;
-}
+}*/
 
 void * generateRequests(void * arg) {
-	makeRequest((char *)arg);
-	//srand(time(NULL));
-	//printf("%d\n", *(int *)arg);
-	/*unsigned int seed;
-	int n = (rand_r(&seed) % max) + 1;
-	printf("%d\n", n);*/
+	int num = *((int *)arg);
+	seed = seed + 1;
+	int n = (rand_r(&seed) % num) + 1;
+	printf("%d\n", n);
 	return NULL;
 }
 
@@ -34,7 +33,7 @@ void * receiveAnswers(void * arg) {
 
 int main(int argc, char const *argv[])
 {
-	if(argc != 4){
+	if(argc != 3){
 		fprintf(stderr,"Invalid number of arguments.\n");
 		return -1;
 	}
@@ -43,18 +42,25 @@ int main(int argc, char const *argv[])
 	mkfifo("entrada",0660);
 	fd=open("entrada",O_WRONLY);*/
 
-	pthread_t tg, tr;
-	int count = 0;
+	FILE *ger;
+	ger = fopen("ger.0000","w+");
+
 	int max = atoi(argv[1]);
+	int count = 0;
+
+	pthread_t tg[max]/*, tr*/;
+	int tArg[max];
+	seed = time(NULL);
 
 	while(count < max){
-		pthread_create(&tg, NULL, (void *)generateRequests, &argv[2]);
+		tArg[count] = atoi(argv[2]);
+		pthread_create(&tg[count], NULL, (void *)generateRequests, &tArg[count]);
 		//pthread_create(&tr, NULL, receiveAnswers, &argv[2]);
 		count++;
 	}
 	count = 0;
 	while(count < max){
-		pthread_join(tg, NULL);
+		pthread_join(tg[count], NULL);
 		//pthread_join(tr, NULL);
 		count++;
 	}
