@@ -1,28 +1,46 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/file.h> 
 #include <time.h>
+#include <fcntl.h>
 
-int reqNum = 0;
 unsigned int seed;
+int p = 0;
+struct timeval t1, t2;
+FILE *file;
 
-/*int makeRequest(char *max){ //ERRO NO MAX...DÁ NUMEROS MARADOS POR CAUSA DO VOID POINTER EM BAIXO
-	srand(time(NULL));		//AINDA NAO CONSEGUI RESOLVER
-	unsigned int seed;
-	int n = (rand_r(&seed) % *max) + 1;
-	printf("%d\n", n);
-	return n;
-}*/
+struct process_t {
+	int p;
+	char *gender;
+	int dur;
+};
+
+void printInFile(int dur, char *gender) {
+	gettimeofday(&t2,NULL);
+	double elapsedTime = (t2.tv_sec - t1.tv_sec)*1000.00;
+	elapsedTime += (t2.tv_usec - t1.tv_usec);
+	p++;
+	fprintf(file, "%.02f - %d - %d: %s - %d - \n", elapsedTime, getpid(), p, gender, dur);
+}
 
 void * generateRequests(void * arg) {
 	int num = *((int *)arg);
 	seed = seed + 1;
 	int n = (rand_r(&seed) % num) + 1;
-	printf("%d\n", n);
+	int g = (rand_r(&seed) % 2);
+	char *gender = malloc(sizeof(char));
+	if(g == 0)
+		*gender = 'F';
+	else
+		*gender = 'M';
+	//write(fd,&n,sizeof(int));
+	printInFile(n ,gender);
 	return NULL;
 }
 
@@ -37,17 +55,23 @@ int main(int argc, char const *argv[])
 		fprintf(stderr,"Invalid number of arguments.\n");
 		return -1;
 	}
+	//Get beggining time of the program
+	gettimeofday(&t1,NULL);
 	
-	/*int fd;
-	mkfifo("entrada",0660);
-	fd=open("entrada",O_WRONLY);*/
+	//FILE TO KEEP INFORMATION
+	char filename[9];
+	sprintf(filename,"ger.%d",getpid());
+	file = fopen(filename, "w");
 
-	FILE *ger;
-	ger = fopen("ger.0000","w+");
+	//FIFO
+	int fd;
+	mkfifo("/tmp/entrada",0660);
+	fd = open("/tmp/entrada",O_WRONLY);
 
+
+	//THREADS
 	int max = atoi(argv[1]);
 	int count = 0;
-
 	pthread_t tg[max]/*, tr*/;
 	int tArg[max];
 	seed = time(NULL);
