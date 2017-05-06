@@ -9,17 +9,35 @@
 #include <sys/file.h> 
 #include <time.h>
 #include <fcntl.h>
+#include <errno.h>
 
 unsigned int seed;
 int p = 0;
 struct timeval t1, t2;
 FILE *file;
+int fd;
 
-struct process_t {
+typedef struct Process{
 	int p;
-	char *gender;
+	char gender;
 	int dur;
-};
+} process_t;
+
+void openFIFO() {
+	if(mkfifo("/tmp/entrada",0660) < 0){
+		if(errno == EEXIST){
+			printf("FIFO '/tmp/entrada' exists already.\n");
+		}
+		else
+			printf("Impossible to create FIFO.\n");
+	}
+	do {
+
+		fd = open("/tmp/entrada",O_WRONLY/* | O_NONBLOCK*/) ;
+		if(fd == -1) sleep(1);
+
+	} while(fd == -1);
+}
 
 void printInFile(int dur, char *gender) {
 	gettimeofday(&t2,NULL);
@@ -27,6 +45,27 @@ void printInFile(int dur, char *gender) {
 	elapsedTime += (t2.tv_usec - t1.tv_usec);
 	p++;
 	fprintf(file, "%.02f - %d - %d: %s - %d - \n", elapsedTime, getpid(), p, gender, dur);
+
+	process_t *process;
+	process = (process_t *) malloc(sizeof(struct Process));
+	process->p = p;
+	process->gender = *gender;
+	process->dur = dur;
+	/*write(fd,&(process.p),sizeof(int));
+	write(fd,process.gender,sizeof(char));
+	write(fd,&(process.dur),sizeof(int));*/
+
+	/*write(fd, &p, sizeof(int));
+	write(fd, gender, sizeof(char *));
+	write(fd, &dur, sizeof(int));*/
+	printf("HERE!\n");
+	//openFIFO();
+	//write(fd, "lel", 3);
+	write(fd, process, sizeof(*process));
+	if(errno == EAGAIN){
+		printf("PIPE FULL\n");
+	}
+	//close(fd);
 }
 
 void * generateRequests(void * arg) {
@@ -39,7 +78,6 @@ void * generateRequests(void * arg) {
 		*gender = 'F';
 	else
 		*gender = 'M';
-	//write(fd,&n,sizeof(int));
 	printInFile(n ,gender);
 	return NULL;
 }
@@ -64,9 +102,21 @@ int main(int argc, char const *argv[])
 	file = fopen(filename, "w");
 
 	//FIFO
-	int fd;
-	mkfifo("/tmp/entrada",0660);
-	fd = open("/tmp/entrada",O_WRONLY);
+	if(mkfifo("/tmp/entrada",0660) < 0){
+		if(errno == EEXIST){
+			printf("FIFO '/tmp/entrada' exists already.\n");
+		}
+		else
+			printf("Impossible to create FIFO.\n");
+	}
+	do {
+		fd = open("/tmp/entrada",O_WRONLY/* |	O_NONBLOCK*/) ;
+		if(fd == -1) sleep(1);
+
+	} while(fd == -1);
+	/*if((fd = open("/tmp/entrada",O_WRONLY)) == -1){
+	printf("Failed to open FIFO.\n");
+	return -1;*/
 
 
 	//THREADS
@@ -82,6 +132,7 @@ int main(int argc, char const *argv[])
 		//pthread_create(&tr, NULL, receiveAnswers, &argv[2]);
 		count++;
 	}
+	close(fd);
 	count = 0;
 	while(count < max){
 		pthread_join(tg[count], NULL);
