@@ -15,6 +15,7 @@
 int fd;
 int tid[200];
 int count = 0;
+int numMaxCli = 0;
 
 typedef struct Process{
 	int p;
@@ -22,10 +23,10 @@ typedef struct Process{
 	int dur;
 } process_t;
 
-/*void * processRequests(void *process){
+void * processRequests(void *process){
 	write(STDOUT_FILENO,"FACK\n", 5);
 	return NULL;
-}*/
+}
 
 int main(int argc, char const *argv[])
 {
@@ -34,39 +35,25 @@ int main(int argc, char const *argv[])
 		return -1;
 	}
 
-	if((fd = open("/tmp/entrada",O_RDONLY/* | O_NONBLOCK*/)) == -1)
+	numMaxCli = atoi(argv[1]);
+
+	if((fd = open("/tmp/entrada",O_RDONLY)) == -1)
 		printf("Error opening the FIFO.\n");
-	/*do {
 
-		fd = open("/tmp/entrada",O_RDONLY | O_NONBLOCK) ;
-		if(fd == -1) sleep(1);
-
-	} while(fd == -1);*/
-
-	//int n = read(fd, process, sizeof(*process));
-	//if(n == 0) sleep(1);
-	int n = 1;
+	int n = 0;
 	do {
-		process_t *process;
-		process = (process_t *) malloc(sizeof(struct Process));
-		//pthread_t td;
+		process_t process;
 
-		//n = read(fd, &process, sizeof(*process));
-		read(fd, &process->p, 1);
-		read(fd, &process->gender, 1);
-		read(fd, &process->dur, 1);
+		n = read(fd, &process, sizeof(process));
 
-		//n = read(fd, str,3);
-		/*pthread_create(&td,NULL,(void *) processRequests, process);
+		pthread_create(&td,NULL,(void *) processRequests, process);
 		tid[count] = td;
-		count++;*/
+		count++;
 
-		//printf("%d\n", n);
-		//printf("%s\n", str);
-		//printf("%c\n", process->gender);
-		printf("%d - %c - %d\n", process->p, process->gender, process->dur);
+		printf("%d - %c - %d\n", process.p, process.gender, process.dur);
 	} while(errno != EAGAIN && n > 0);
-	//rintf("%s\n", str);
+	
+
 	/*int c = 0;
 	while(c < count){
 		pthread_join(tid[c],NULL);

@@ -26,14 +26,14 @@ typedef struct Process{
 void openFIFO() {
 	if(mkfifo("/tmp/entrada",0660) < 0){
 		if(errno == EEXIST){
-			printf("FIFO '/tmp/entrada' exists already.\n");
+			//printf("FIFO '/tmp/entrada' exists already.\n");
 		}
 		else
 			printf("Impossible to create FIFO.\n");
 	}
 	do {
 
-		fd = open("/tmp/entrada",O_WRONLY/* | O_NONBLOCK*/) ;
+		fd = open("/tmp/entrada",O_WRONLY) ;
 		if(fd == -1) sleep(1);
 
 	} while(fd == -1);
@@ -43,25 +43,16 @@ void printInFile(int dur, char *gender) {
 	gettimeofday(&t2,NULL);
 	double elapsedTime = (t2.tv_sec - t1.tv_sec)*1000.00;
 	elapsedTime += (t2.tv_usec - t1.tv_usec);
-	p++;
 	fprintf(file, "%.02f - %d - %d: %s - %d - \n", elapsedTime, getpid(), p, gender, dur);
+	p++;
 
-	/*process_t *process;
-	process = (process_t *) malloc(sizeof(struct Process));
-	process->p = p;
-	process->gender = *gender;
-	process->dur = dur;*/
-	/*write(fd,&(process.p),sizeof(int));
-	write(fd,process.gender,sizeof(char));
-	write(fd,&(process.dur),sizeof(int));*/
+	process_t process;
+	process.p = p;
+	process.gender = *gender;
+	process.dur = dur;
 
-	write(fd, &p, sizeof(int));
-	write(fd, gender, sizeof(char *));
-	write(fd, &dur, sizeof(int));
-	
-	//printf("HERE!\n");
 	//openFIFO();
-	//write(fd, process, sizeof(*process));
+	write(fd, &process, sizeof(process));
 	if(errno == EAGAIN){
 		printf("PIPE FULL\n");
 	}
@@ -102,7 +93,7 @@ int main(int argc, char const *argv[])
 	file = fopen(filename, "w");
 
 	//FIFO
-	/*if(mkfifo("/tmp/entrada",0660) < 0){
+	if(mkfifo("/tmp/entrada",0660) < 0){
 		if(errno == EEXIST){
 			printf("FIFO '/tmp/entrada' exists already.\n");
 		}
@@ -113,10 +104,7 @@ int main(int argc, char const *argv[])
 		fd = open("/tmp/entrada",O_WRONLY) ;
 		if(fd == -1) sleep(1);
 
-	} while(fd == -1);*/
-	/*if((fd = open("/tmp/entrada",O_WRONLY)) == -1){
-	printf("Failed to open FIFO.\n");
-	return -1;*/
+	} while(fd == -1);
 
 
 	//THREADS
@@ -132,13 +120,13 @@ int main(int argc, char const *argv[])
 		//pthread_create(&tr, NULL, receiveAnswers, &argv[2]);
 		count++;
 	}
-	close(fd);
 	count = 0;
 	while(count < max){
 		pthread_join(tg[count], NULL);
 		//pthread_join(tr, NULL);
 		count++;
 	}
+	close(fd);
 
 	return 0;
 }
