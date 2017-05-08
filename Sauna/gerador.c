@@ -46,22 +46,22 @@ void printInFile(int dur, char *gender) {
 	p++;
 	fprintf(file, "%.02f - %d - %d: %s - %d - \n", elapsedTime, getpid(), p, gender, dur);
 
-	process_t *process;
+	/*process_t *process;
 	process = (process_t *) malloc(sizeof(struct Process));
 	process->p = p;
 	process->gender = *gender;
-	process->dur = dur;
+	process->dur = dur;*/
 	/*write(fd,&(process.p),sizeof(int));
 	write(fd,process.gender,sizeof(char));
 	write(fd,&(process.dur),sizeof(int));*/
 
-	/*write(fd, &p, sizeof(int));
+	write(fd, &p, sizeof(int));
 	write(fd, gender, sizeof(char *));
-	write(fd, &dur, sizeof(int));*/
-	printf("HERE!\n");
+	write(fd, &dur, sizeof(int));
+	
+	//printf("HERE!\n");
 	//openFIFO();
-	//write(fd, "lel", 3);
-	write(fd, process, sizeof(*process));
+	//write(fd, process, sizeof(*process));
 	if(errno == EAGAIN){
 		printf("PIPE FULL\n");
 	}
@@ -102,7 +102,7 @@ int main(int argc, char const *argv[])
 	file = fopen(filename, "w");
 
 	//FIFO
-	if(mkfifo("/tmp/entrada",0660) < 0){
+	/*if(mkfifo("/tmp/entrada",0660) < 0){
 		if(errno == EEXIST){
 			printf("FIFO '/tmp/entrada' exists already.\n");
 		}
@@ -110,10 +110,10 @@ int main(int argc, char const *argv[])
 			printf("Impossible to create FIFO.\n");
 	}
 	do {
-		fd = open("/tmp/entrada",O_WRONLY/* |	O_NONBLOCK*/) ;
+		fd = open("/tmp/entrada",O_WRONLY) ;
 		if(fd == -1) sleep(1);
 
-	} while(fd == -1);
+	} while(fd == -1);*/
 	/*if((fd = open("/tmp/entrada",O_WRONLY)) == -1){
 	printf("Failed to open FIFO.\n");
 	return -1;*/

@@ -46,20 +46,24 @@ int main(int argc, char const *argv[])
 	//int n = read(fd, process, sizeof(*process));
 	//if(n == 0) sleep(1);
 	int n = 1;
-	//char str[100];
 	do {
 		process_t *process;
 		process = (process_t *) malloc(sizeof(struct Process));
 		//pthread_t td;
 
-		n = read(fd, &process, sizeof(*process));
-		//printf("FACK\n");
+		//n = read(fd, &process, sizeof(*process));
+		read(fd, &process->p, 1);
+		read(fd, &process->gender, 1);
+		read(fd, &process->dur, 1);
+
 		//n = read(fd, str,3);
 		/*pthread_create(&td,NULL,(void *) processRequests, process);
 		tid[count] = td;
 		count++;*/
 
 		//printf("%d\n", n);
+		//printf("%s\n", str);
+		//printf("%c\n", process->gender);
 		printf("%d - %c - %d\n", process->p, process->gender, process->dur);
 	} while(errno != EAGAIN && n > 0);
 	//rintf("%s\n", str);
