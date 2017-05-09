@@ -15,7 +15,7 @@ unsigned int seed;
 int p = 0;
 struct timeval t1, t2;
 FILE *file;
-int fd;
+int fd[2];
 
 typedef struct Process{
 	int p;
@@ -23,20 +23,21 @@ typedef struct Process{
 	int dur;
 } process_t;
 
-void openFIFO() {
-	if(mkfifo("/tmp/entrada",0660) < 0){
-		if(errno == EEXIST){
-			//printf("FIFO '/tmp/entrada' exists already.\n");
-		}
-		else
-			printf("Impossible to create FIFO.\n");
-	}
+void openFIFOWrite() {
 	do {
 
-		fd = open("/tmp/entrada",O_WRONLY) ;
-		if(fd == -1) sleep(1);
+		fd[0] = open("/tmp/entrada",O_WRONLY) ;
+		if(fd[0] == -1) sleep(1);
 
-	} while(fd == -1);
+	} while(fd[0] == -1);
+}
+
+void openFIFORead() {
+	do {
+		fd[1] = open("/tmp/rejeitados",O_RDONLY) ;
+		if(fd[1] == -1) sleep(1);
+
+	} while(fd[1] == -1);
 }
 
 void printInFile(int dur, char *gender) {
@@ -44,7 +45,7 @@ void printInFile(int dur, char *gender) {
 	double elapsedTime = (t2.tv_sec - t1.tv_sec)*1000.00;
 	elapsedTime += (t2.tv_usec - t1.tv_usec);
 	fprintf(file, "%.02f - %d - %d: %s - %d - \n", elapsedTime, getpid(), p, gender, dur);
-	p++;
+	//p++;
 
 	process_t process;
 	process.p = p;
@@ -52,7 +53,7 @@ void printInFile(int dur, char *gender) {
 	process.dur = dur;
 
 	//openFIFO();
-	write(fd, &process, sizeof(process));
+	write(fd[0], &process, sizeof(process));
 	if(errno == EAGAIN){
 		printf("PIPE FULL\n");
 	}
@@ -70,6 +71,7 @@ void * generateRequests(void * arg) {
 	else
 		*gender = 'M';
 	printInFile(n ,gender);
+	p++;
 	return NULL;
 }
 
@@ -93,19 +95,8 @@ int main(int argc, char const *argv[])
 	file = fopen(filename, "w");
 
 	//FIFO
-	if(mkfifo("/tmp/entrada",0660) < 0){
-		if(errno == EEXIST){
-			printf("FIFO '/tmp/entrada' exists already.\n");
-		}
-		else
-			printf("Impossible to create FIFO.\n");
-	}
-	do {
-		fd = open("/tmp/entrada",O_WRONLY) ;
-		if(fd == -1) sleep(1);
-
-	} while(fd == -1);
-
+	openFIFOWrite();
+	openFIFORead();
 
 	//THREADS
 	int max = atoi(argv[1]);
@@ -126,7 +117,8 @@ int main(int argc, char const *argv[])
 		//pthread_join(tr, NULL);
 		count++;
 	}
-	close(fd);
+	close(fd[0]);
+	close(fd[1]);
 
 	return 0;
 }
