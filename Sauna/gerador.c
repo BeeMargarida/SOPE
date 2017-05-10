@@ -12,7 +12,7 @@
 #include <errno.h>
 
 unsigned int seed;
-int p = 0;
+static int p = 0;
 struct timeval t1, t2;
 FILE *file;
 int fd[2];
@@ -40,38 +40,33 @@ void openFIFORead() {
 	} while(fd[1] == -1);
 }
 
-void printInFile(int dur, char *gender) {
+void makeRequest(process_t *process, int num) {
 	gettimeofday(&t2,NULL);
 	double elapsedTime = (t2.tv_sec - t1.tv_sec)*1000.00;
 	elapsedTime += (t2.tv_usec - t1.tv_usec);
-	fprintf(file, "%.02f - %d - %d: %s - %d - \n", elapsedTime, getpid(), p, gender, dur);
-	//p++;
-
-	process_t process;
-	process.p = p;
-	process.gender = *gender;
-	process.dur = dur;
-
-	//openFIFO();
-	write(fd[0], &process, sizeof(process));
-	if(errno == EAGAIN){
-		printf("PIPE FULL\n");
-	}
-	//close(fd);
-}
-
-void * generateRequests(void * arg) {
-	int num = *((int *)arg);
 	seed = seed + 1;
-	int n = (rand_r(&seed) % num) + 1;
+	int dur = (rand_r(&seed) % num) + 1;
 	int g = (rand_r(&seed) % 2);
 	char *gender = malloc(sizeof(char));
 	if(g == 0)
 		*gender = 'F';
 	else
 		*gender = 'M';
-	printInFile(n ,gender);
+
+	fprintf(file, "%.02f - %d - %d: %s - %d - \n", elapsedTime, getpid(), p, gender, dur);
+	process->p = p;
+	process->gender = *gender;
+	process->dur = dur;
+
 	p++;
+}
+
+void * generateRequests(void * arg) {
+	process_t process = *((process_t *)arg);
+	write(fd[0], &process, sizeof(process));
+	if(errno == EAGAIN){
+		printf("PIPE FULL\n");
+	}
 	return NULL;
 }
 
@@ -102,12 +97,14 @@ int main(int argc, char const *argv[])
 	int max = atoi(argv[1]);
 	int count = 0;
 	pthread_t tg[max]/*, tr*/;
-	int tArg[max];
 	seed = time(NULL);
 
 	while(count < max){
-		tArg[count] = atoi(argv[2]);
-		pthread_create(&tg[count], NULL, (void *)generateRequests, &tArg[count]);
+
+		int dur = atoi(argv[2]);
+		process_t process;
+		makeRequest(&process,dur);
+		pthread_create(&tg[count], NULL, (void *)generateRequests, &process);
 		//pthread_create(&tr, NULL, receiveAnswers, &argv[2]);
 		count++;
 	}
