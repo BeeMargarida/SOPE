@@ -21,6 +21,7 @@ typedef struct Process{
 	int p;
 	char gender;
 	int dur;
+	int rej;
 } process_t;
 
 void openFIFOWrite() {
@@ -57,12 +58,15 @@ void makeRequest(process_t *process, int num) {
 	process->p = p;
 	process->gender = *gender;
 	process->dur = dur;
+	process->rej = 0;
 
 	p++;
 }
 
 void * generateRequests(void * arg) {
-	process_t process = *((process_t *)arg);
+	process_t process;
+	makeRequest(&process, *((int *)arg));
+	//printf("%d - %c - %d\n", process.p, process.gender, process.dur);
 	write(fd[0], &process, sizeof(process));
 	if(errno == EAGAIN){
 		printf("PIPE FULL\n");
@@ -91,20 +95,20 @@ int main(int argc, char const *argv[])
 
 	//FIFO
 	openFIFOWrite();
-	openFIFORead();
+	//openFIFORead();
 
 	//THREADS
 	int max = atoi(argv[1]);
 	int count = 0;
 	pthread_t tg[max]/*, tr*/;
+	int tArg[max];
 	seed = time(NULL);
 
 	while(count < max){
 
 		int dur = atoi(argv[2]);
-		process_t process;
-		makeRequest(&process,dur);
-		pthread_create(&tg[count], NULL, (void *)generateRequests, &process);
+		tArg[count] = dur;
+		pthread_create(&tg[count], NULL, (void *)generateRequests, &tArg[count]);
 		//pthread_create(&tr, NULL, receiveAnswers, &argv[2]);
 		count++;
 	}
@@ -115,7 +119,7 @@ int main(int argc, char const *argv[])
 		count++;
 	}
 	close(fd[0]);
-	close(fd[1]);
+	//close(fd[1]);
 
 	return 0;
 }

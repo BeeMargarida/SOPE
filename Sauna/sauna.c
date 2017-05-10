@@ -15,36 +15,44 @@
 int fd[2];
 pthread_t tid[200];
 int count = 0;
-int numMaxCli = 0;
+int numMaxCli;
 char *currGender;
 
 typedef struct Process{
 	int p;
 	char gender;
 	int dur;
+	int rej;
 } process_t;
 
-void * processRequests(void *process){
-	process_t pro = *(process_t *) process;
+void * processRequests(void * pro){
+	process_t process = *((process_t *) pro);
+	
 	if(currGender == NULL){
-		numMaxCli++;
-		*currGender = pro.gender;
-		//SEND through fifo as accepted
-		sleep(pro.dur);
 		numMaxCli--;
+		*currGender = process.gender;
+		//SEND through fifo as accepted
+		printf("A: %d - %c - %d\n", process.p, process.gender, process.dur);
+		sleep(process.dur);
+		numMaxCli++;
 		if(numMaxCli == 0)
 			currGender = NULL;
 	}
-	else if(*currGender == pro.gender){
-		numMaxCli++;
+	else if(*currGender == process.gender){
+		if(numMaxCli != 0){
+			numMaxCli--;
 		//SEND through fifo as accepted
-		sleep(pro.dur);
-		numMaxCli--;
-		if(numMaxCli == 0)
-			currGender = NULL;
+			printf("B: %d - %c - %d\n", process.p, process.gender, process.dur);
+			sleep(process.dur);
+			numMaxCli++;
+			if(numMaxCli == 0)
+				currGender = NULL;
+		}
 	}
 	else {
 		//send through FIFO
+		process.rej++;
+		//write(fd[1],&pro, sizeof(pro));
 	}
 	return NULL;
 }
@@ -70,7 +78,7 @@ int main(int argc, char const *argv[])
 		printf("Error opening the FIFO.\n");
 
 	//FIFO WRITE
-	if(mkfifo("/tmp/rejeitados",0660) < 0){
+	/*if(mkfifo("/tmp/rejeitados",0660) < 0){
 		if(errno == EEXIST){
 			printf("FIFO '/tmp/rejeitados' exists already.\n");
 		}
@@ -78,28 +86,25 @@ int main(int argc, char const *argv[])
 			printf("Impossible to create FIFO.\n");
 	}
 	if((fd[1] = open("/tmp/rejeitados",O_WRONLY)) == -1)
-		printf("Error opening the FIFO.\n");
+		printf("Error opening the FIFO.\n");*/
 
 	//READ REQUEST
-	int n = 0;
-	do {
-		process_t process;
-		n = read(fd[0], &process, sizeof(process));
+	int n = 1;
+	process_t process;
+	while(read(fd[0], &process, sizeof(process)) > 0){
 		printf("%d - %c - %d\n", process.p, process.gender, process.dur);
 		pthread_create(&tid[count],NULL,(void *) processRequests, &process);
 		count++;
-		
-	
-	} while(errno != EAGAIN && n > 0);
-	
+	}
+
 
 	int c = 0;
 	while(c < count){
-		pthread_exit(/*tid[c],*/NULL);
+		pthread_join(tid[count], NULL);
 		c++;
 	}
 	close(fd[0]);
-	close(fd[1]);
+	//close(fd[1]);
 
 
 	return 0;
