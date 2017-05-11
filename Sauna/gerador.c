@@ -13,6 +13,7 @@
 
 unsigned int seed;
 static int p = 0;
+pthread_mutex_t lock;
 struct timeval t1, t2;
 FILE *file;
 int fd[2];
@@ -65,7 +66,9 @@ void makeRequest(process_t *process, int num) {
 
 void * generateRequests(void * arg) {
 	process_t process;
+	pthread_mutex_lock(&lock);
 	makeRequest(&process, *((int *)arg));
+	pthread_mutex_unlock(&lock);
 	//printf("%d - %c - %d\n", process.p, process.gender, process.dur);
 	write(fd[0], &process, sizeof(process));
 	if(errno == EAGAIN){
@@ -103,6 +106,11 @@ int main(int argc, char const *argv[])
 	pthread_t tg[max]/*, tr*/;
 	int tArg[max];
 	seed = time(NULL);
+
+	if (pthread_mutex_init(&lock, NULL) != 0) {
+        printf("Mutex init failed\n");
+        return 1;
+    }
 
 	while(count < max){
 

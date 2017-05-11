@@ -16,7 +16,8 @@ int fd[2];
 pthread_t tid[200];
 int count = 0;
 int numMaxCli;
-char *currGender;
+char currGender = '\0';
+pthread_mutex_t lock;
 
 typedef struct Process{
 	int p;
@@ -26,34 +27,39 @@ typedef struct Process{
 } process_t;
 
 void * processRequests(void * pro){
+	/*process_t *process = ((process_t *) pro);
+	printf("FACK: %d - %c - %d\n", process->p, process->gender, process->dur);*/
 	process_t process = *((process_t *) pro);
-	
-	if(currGender == NULL){
+	printf("FACK: %d - %c - %d\n", process.p, process.gender, process.dur);
+
+	if(currGender == '\0'){
 		numMaxCli--;
-		*currGender = process.gender;
+		currGender = process.gender;
 		//SEND through fifo as accepted
-		printf("A: %d - %c - %d\n", process.p, process.gender, process.dur);
-		sleep(process.dur);
+		sleep(process.dur/1000);
 		numMaxCli++;
 		if(numMaxCli == 0)
-			currGender = NULL;
+			currGender = '\0';
 	}
-	else if(*currGender == process.gender){
+	else if(currGender == process.gender){
 		if(numMaxCli != 0){
 			numMaxCli--;
 		//SEND through fifo as accepted
 			printf("B: %d - %c - %d\n", process.p, process.gender, process.dur);
-			sleep(process.dur);
+			sleep(process.dur/1000);
+			printf("LEL2\n");
 			numMaxCli++;
 			if(numMaxCli == 0)
-				currGender = NULL;
+				currGender = '\0';
 		}
 	}
 	else {
 		//send through FIFO
 		process.rej++;
-		//write(fd[1],&pro, sizeof(pro));
+		printf("POOP\n");
+		write(fd[1],&process, sizeof(process));
 	}
+	//free(pro);
 	return NULL;
 }
 
@@ -88,13 +94,32 @@ int main(int argc, char const *argv[])
 	if((fd[1] = open("/tmp/rejeitados",O_WRONLY)) == -1)
 		printf("Error opening the FIFO.\n");*/
 
+	if (pthread_mutex_init(&lock, NULL) != 0) {
+        printf("Mutex init failed\n");
+        return 1;
+    }
 	//READ REQUEST
-	int n = 1;
-	process_t process;
-	while(read(fd[0], &process, sizeof(process)) > 0){
-		printf("%d - %c - %d\n", process.p, process.gender, process.dur);
-		pthread_create(&tid[count],NULL,(void *) processRequests, &process);
+	//process_t process;
+	/*process_t *process = malloc(sizeof(process_t));
+	while(read(fd[0], process, sizeof(*process)) > 0){
+		//printf("%d - %c - %d\n", process.p, process.gender, process.dur);
+		pthread_create(&tid[count],NULL,(void *) processRequests, (void *) process);
 		count++;
+	}*/
+    process_t process[200];
+    int index = 0;
+    int n = 1;
+	while(n > 0){
+		//pthread_mutex_lock(&lock);
+		//process_t process = malloc(sizeof(process_t));
+		n = read(fd[0], &process[index], sizeof(struct Process));
+		if(n > 0){
+			//printf("%d - %c - %d\n", process[index].p, process[index].gender, process[index].dur);
+			pthread_create(&tid[index],NULL,(void *) processRequests, (void *) &process[index]);
+			count++;
+			index++;
+		}
+		//pthread_mutex_unlock(&lock);
 	}
 
 
