@@ -17,6 +17,8 @@ pthread_mutex_t lock;
 struct timeval t1, t2;
 FILE *file;
 int fd[2];
+int numRequests;
+int countRequests = 0;
 
 int gerM = 0, gerF = 0, rejM = 0, rejF = 0, descM = 0, descF = 0;
 
@@ -61,6 +63,13 @@ void printInFile(process_t *process, int state) {
 	}
 }
 
+void printStatisticsInFile() {
+	fprintf(file, "\nSTATISTICS\n");
+	fprintf(file, "Requests:\nTotal: %d\t F: %d\t M: %d\n", (gerM+gerF),gerF,gerM);
+	fprintf(file, "Rejected:\nTotal: %d\t F: %d\t M: %d\n", (rejM+rejF),rejF,rejM);
+	fprintf(file, "Discarded:\nTotal: %d\t F: %d\t M: %d\n", (descM+descF),descF,descM);
+}
+
 void makeRequest(process_t *process, int num) {
 	seed = seed + 1;
 	int dur = (rand_r(&seed) % num) + 1;
@@ -75,36 +84,63 @@ void makeRequest(process_t *process, int num) {
 	process->gender = *gender;
 	process->dur = dur;
 	process->rej = 0;
+	pthread_mutex_lock(&lock);
 	if(process->gender == 'F')
 		gerF++;
 	else
 		gerM++;
-	pthread_mutex_lock(&lock);
 	p++;
 	pthread_mutex_unlock(&lock);
 }
 
 void * generateRequests(void * arg) {
-	process_t process;
-	//pthread_mutex_lock(&lock);
-	makeRequest(&process, *((int *)arg));
-	//pthread_mutex_unlock(&lock);
-	printInFile(&process,0);
-	write(fd[0], &process, sizeof(process));
-	if(errno == EAGAIN){
-		printf("PIPE FULL\n");
+	while(countRequests < numRequests){
+		process_t process;
+		//pthread_mutex_lock(&lock);
+		makeRequest(&process, *((int *)arg));
+		//pthread_mutex_unlock(&lock);
+		printInFile(&process,0);
+		write(fd[0], &process, sizeof(process));
+		if(errno == EAGAIN){
+			printf("PIPE FULL\n");
+		}
+		pthread_mutex_lock(&lock);
+		countRequests++;
+		pthread_mutex_unlock(&lock);
 	}
 	return NULL;
 }
 
-void * receiveAnswers(void * arg){
-	process_t process = *((process_t *)arg);
-	if(process.rej >= 3){
-		printInFile(&process,-1);
-		return NULL;
+void handleRejected(process_t *process){
+	pthread_mutex_lock(&lock);
+	if(process->rej >= 3){
+		if(process->gender == 'F')
+			descF++;
+		else
+			descM++;
+		printInFile(process,-1);
+		return;
 	}
-	else
-		write(fd[0],&process,sizeof(process));
+	else{
+		if(process->gender == 'F')
+			rejF++;
+		else
+			rejM++;
+		write(fd[0],process,sizeof(*process));
+	}
+	pthread_mutex_unlock(&lock);
+}
+
+void * receiveAnswers(void * arg){
+	int n = 1;
+	while(n > 0){
+		process_t process;	
+		n = read(fd[1], &process,sizeof(process));
+		if(n > 0){
+			handleRejected(&process);
+			printInFile(&process,1);
+		}
+	}	
 	return NULL;
 }
 
@@ -126,26 +162,30 @@ int main(int argc, char const *argv[])
 	openFIFOWrite();
 	openFIFORead();
 
-	//THREADS
-	int max = atoi(argv[1]);
-	int count = 0;
-	pthread_t tg[max], tr[max];
-	int tArg[max];
-	seed = time(NULL);
-
 	//MUTEX INITIALIZATION
 	if (pthread_mutex_init(&lock, NULL) != 0) {
 		printf("Mutex init failed\n");
 		return 1;
 	}
 
-	while(count < max){
+	//THREADS
+	numRequests = atoi(argv[1]);
+	pthread_t tg, tr;
+	int tArg[1];
+	seed = time(NULL);
+
+	int dur = atoi(argv[2]);
+	tArg[0] = dur;
+	pthread_create(&tg,NULL,(void *)generateRequests, &tArg[0]);
+	pthread_create(&tr,NULL,(void *)receiveAnswers, NULL);
+	/*while(count < max){
 		int dur = atoi(argv[2]);
 		tArg[count] = dur;
 		pthread_create(&tg[count], NULL, (void *)generateRequests, &tArg[count]);
 		count++;
-	}
-	int index = 0;
+	}*/
+
+	/*int index = 0;
 	int n = 1;
 	while(n > 0){
 		process_t process;	
@@ -155,9 +195,12 @@ int main(int argc, char const *argv[])
 			pthread_create(&tr[index],NULL,(void *) receiveAnswers, &process);
 			index++;
 		}
-	}
+	}*/
 	
-	count = 0;
+	pthread_join(tg, NULL);
+	pthread_join(tr, NULL);
+
+	/*count = 0;
 	while(count < max){
 		pthread_join(tg[count], NULL);
 		count++;
@@ -166,12 +209,23 @@ int main(int argc, char const *argv[])
 	while(i < index){
 		pthread_join(tr[i], NULL);
 		i++;
-	}
+	}*/
+
+	printStatisticsInFile();
+	pthread_mutex_destroy(&lock);
+	sleep(4);
 	close(fd[0]);
 	close(fd[1]);
 
-	pthread_mutex_destroy(&lock);
+	/*int t = fork();
+	if(t > 0){ //pai
+		close(fd[0]);
+	} 
+	else{
+		close(fd[1]);
+	}*/
 
+	
 	/*if (unlink("/tmp/entrada")<0)
 		printf("Error when destroying FIFO '/tmp/entrada'\n");
 	else

@@ -22,6 +22,8 @@ static int numMaxCli;
 char currGender = '\0';
 pthread_mutex_t lock;
 
+int pedF = 0, pedM = 0, rejF = 0, rejM = 0, serF = 0, serM = 0;
+
 typedef struct Process{
 	int p;
 	char gender;
@@ -59,29 +61,45 @@ void printInFile(process_t *process, int state) {
 	elapsedTime += (t2.tv_usec - t1.tv_usec);
 	if(state == 0){
 		char *msg = "RECEBIDO";
-		char m[200];
-		sprintf(m, "%.02f\t\t-\t%d\t-\t%d:\t%c\t-\t%d\t-\t%s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
-		fprintf(file, "%-25s", m);
-		//fprintf(file, "%f\t-\t%d\t-\t%d:\t%c\t-\t%d\t-\t%s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		//char m[200];
+		//sprintf(m, "%.02f\t-\t%d\t-\t%d\t:\t%c\t-\t%d\t-\t%s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		//fprintf(file, "%-25s", m);
+		fprintf(file, "\t%.02f\t-\t%d\t-\t%d\t:\t%c\t-\t%d\t-\t%s\t\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 	else if(state == 1){
 		char *msg = "SERVIDO";
-		fprintf(file, "%.02f\t-\t%d\t-\t%d:\t%c\t-\t%d\t-\t%s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "\t%.02f\t-\t%d\t-\t%d\t:\t%c\t-\t%d\t-\t%s\t\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 	else {
 		char *msg = "REJEITADO";
-		fprintf(file, "%.02f\t-\t%d\t-\t%d:\t%c\t-\t%d\t-\t%s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "\t%.02f\t-\t%d\t-\t%d\t:\t%c\t-\t%d\t-\t%s\t\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
+}
+
+void printStatisticsInFile() {
+	fprintf(file, "\nSTATISTICS\n");
+	fprintf(file, "Requests:\nTotal: %d\t F: %d\t M: %d\n", (pedM+pedF),pedF,pedM);
+	fprintf(file, "Rejected:\nTotal: %d\t F: %d\t M: %d\n", (rejM+rejF),rejF,rejM);
+	fprintf(file, "Served:\nTotal: %d\t F: %d\t M: %d\n", (serM+serF),serF,serM);
 }
 
 void * processRequests(void * pro){
 	process_t process = *((process_t *) pro);
 	printInFile(&process, 0);
-	//printf("FACK: %d - %c - %d\n", process.p, process.gender, process.dur);
+	pthread_mutex_lock(&lock);
+	if(process.gender == 'F')
+			pedF++;
+		else
+			pedM++;
+		pthread_mutex_unlock(&lock);
 	if(currGender == '\0'){
 		pthread_mutex_lock(&lock);
 		clientCount++;
 		currGender = process.gender;
+		if(process.gender == 'F')
+			serF++;
+		else
+			serM++;
 		pthread_mutex_unlock(&lock);
 		printInFile(&process, 1);
 		sleep(process.dur/1000);
@@ -95,24 +113,32 @@ void * processRequests(void * pro){
 		pthread_mutex_unlock(&lock);
 	}
 	else if((currGender == process.gender) && (clientCount != numMaxCli)){
-			pthread_mutex_lock(&lock);
-			clientCount++;
-			pthread_mutex_unlock(&lock);
+		pthread_mutex_lock(&lock);
+		clientCount++;
+		if(process.gender == 'F')
+			serF++;
+		else
+			serM++;
+		pthread_mutex_unlock(&lock);
 
-			printInFile(&process, 1);
-			sleep(process.dur/1000);
+		printInFile(&process, 1);
+		sleep(process.dur/1000);
 
-			pthread_mutex_lock(&lock);
-			clientCount--;
-			//printf("B: %d\n", process.p);
-			
-			if(clientCount == 0)
-				currGender = '\0';
-			pthread_mutex_unlock(&lock);
+		pthread_mutex_lock(&lock);
+		clientCount--;			
+		if(clientCount == 0)
+			currGender = '\0';
+		pthread_mutex_unlock(&lock);
 	}
 	else {
 		//send through FIFO
 		process.rej++;
+		pthread_mutex_lock(&lock);
+		if(process.gender == 'F')
+			rejF++;
+		else
+			rejM++;
+		pthread_mutex_unlock(&lock);
 		printInFile(&process, -1);
 		//printf("C: %d\n", process.p);
 		//openFIFOWrite();
@@ -178,20 +204,31 @@ int main(int argc, char const *argv[])
 		pthread_join(tid[count], NULL);
 		c++;
 	}
+
+	printStatisticsInFile();
+	pthread_mutex_destroy(&lock);
+
+	sleep(4);
 	close(fd[0]);
 	close(fd[1]);
 
-	pthread_mutex_destroy(&lock);
-
-	if (unlink("/tmp/entrada")<0)
-		printf("Error when destroying FIFO '/tmp/entrada'\n");
-	else
-		printf("FIFO '/tmp/entrada' has been destroyed\n"); 
+	/*int t = fork();
+	if(t > 0){ //pai
+		close(fd[0]);
+	} 
+	else{
+		close(fd[1]);
+	}*/
 
 	if (unlink("/tmp/rejeitados")<0)
 		printf("Error when destroying FIFO '/tmp/rejeitados'\n");
 	else
 		printf("FIFO '/tmp/rejeitados' has been destroyed\n"); 
+
+	if (unlink("/tmp/entrada")<0)
+		printf("Error when destroying FIFO '/tmp/entrada'\n");
+	else
+		printf("FIFO '/tmp/entrada' has been destroyed\n"); 
 	
 	exit(0);
 }
