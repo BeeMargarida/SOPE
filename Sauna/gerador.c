@@ -66,10 +66,10 @@ void makeRequest(process_t *process, int num) {
 
 void * generateRequests(void * arg) {
 	process_t process;
-	pthread_mutex_lock(&lock);
+	//pthread_mutex_lock(&lock);
 	makeRequest(&process, *((int *)arg));
-	pthread_mutex_unlock(&lock);
-	//printf("%d - %c - %d\n", process.p, process.gender, process.dur);
+	//pthread_mutex_unlock(&lock);
+
 	write(fd[0], &process, sizeof(process));
 	if(errno == EAGAIN){
 		printf("PIPE FULL\n");
@@ -78,7 +78,17 @@ void * generateRequests(void * arg) {
 }
 
 void * receiveAnswers(void * arg) {
-	printf("lel1");
+	process_t process;	
+	read(fd[1], &process,sizeof(process));
+	if(process.rej>=3)
+	{				
+		return NULL;
+	}
+	else 
+	{
+		write(fd[0], &process, sizeof(process));
+		
+	}	
 	return NULL;
 }
 
@@ -98,12 +108,12 @@ int main(int argc, char const *argv[])
 
 	//FIFO
 	openFIFOWrite();
-	//openFIFORead();
+	openFIFORead();
 
 	//THREADS
 	int max = atoi(argv[1]);
 	int count = 0;
-	pthread_t tg[max]/*, tr*/;
+	pthread_t tg[max], tr[max];
 	int tArg[max];
 	seed = time(NULL);
 
@@ -117,17 +127,17 @@ int main(int argc, char const *argv[])
 		int dur = atoi(argv[2]);
 		tArg[count] = dur;
 		pthread_create(&tg[count], NULL, (void *)generateRequests, &tArg[count]);
-		//pthread_create(&tr, NULL, receiveAnswers, &argv[2]);
+		pthread_create(&tr[count], NULL, receiveAnswers, NULL);
 		count++;
 	}
 	count = 0;
 	while(count < max){
 		pthread_join(tg[count], NULL);
-		//pthread_join(tr, NULL);
+		pthread_join(tr[count], NULL);
 		count++;
 	}
 	close(fd[0]);
-	//close(fd[1]);
+	close(fd[1]);
 
 	return 0;
 }
