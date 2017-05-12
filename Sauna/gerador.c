@@ -19,7 +19,7 @@ FILE *file;
 int fd[2];
 int numRequests;
 int countRequests = 0;
-
+//STATISTICS VARIABLES
 int gerM = 0, gerF = 0, rejM = 0, rejF = 0, descM = 0, descF = 0;
 
 typedef struct Process{
@@ -39,7 +39,7 @@ void openFIFOWrite() {
 
 void openFIFORead() {
 	do {
-		fd[1] = open("/tmp/rejeitados",O_RDONLY | O_NONBLOCK) ;
+		fd[1] = open("/tmp/rejeitados",O_RDONLY/* | O_NONBLOCK*/) ;
 		if(fd[1] == -1) sleep(1);
 
 	} while(fd[1] == -1);
@@ -96,9 +96,7 @@ void makeRequest(process_t *process, int num) {
 void * generateRequests(void * arg) {
 	while(countRequests < numRequests){
 		process_t process;
-		//pthread_mutex_lock(&lock);
 		makeRequest(&process, *((int *)arg));
-		//pthread_mutex_unlock(&lock);
 		printInFile(&process,0);
 		write(fd[0], &process, sizeof(process));
 		if(errno == EAGAIN){
@@ -133,26 +131,34 @@ void handleRejected(process_t *process){
 
 void * receiveAnswers(void * arg){
 	int n = 1;
-	while(n > 0){
-		process_t process;	
+	int closeflag = 0;
+	do{
+		process_t process;
 		n = read(fd[1], &process,sizeof(process));
-		if(n > 0){
+		printf("REJ: %d - %c - %d\n", process.p, process.gender, process.dur);
+		if(process.p == -1){
+			closeflag = -1;
+			//close(fd[0]);
+			close(fd[1]);
+			return NULL;
+		}
+		else if(n > 0){
 			handleRejected(&process);
 			printInFile(&process,1);
-		}
-	}	
+		}	
+	} while(n > 0 && closeflag != -1);
 	return NULL;
 }
 
 int main(int argc, char const *argv[])
 {
+	//Get beggining time of the program
+	gettimeofday(&t1,NULL);
 	if(argc != 3){
 		fprintf(stderr,"Invalid number of arguments.\n");
 		return -1;
 	}
-	//Get beggining time of the program
-	gettimeofday(&t1,NULL);
-	
+
 	//FILE TO KEEP INFORMATION
 	char filename[14];
 	sprintf(filename,"/tmp/ger.%d",getpid());
@@ -174,66 +180,26 @@ int main(int argc, char const *argv[])
 	int tArg[1];
 	seed = time(NULL);
 
+	//THREADS
 	int dur = atoi(argv[2]);
 	tArg[0] = dur;
+
+	process_t process;
+	process.p = -1;
+	process.dur = numRequests;
+	write(fd[0], &process, sizeof(process));
+	
 	pthread_create(&tg,NULL,(void *)generateRequests, &tArg[0]);
 	pthread_create(&tr,NULL,(void *)receiveAnswers, NULL);
-	/*while(count < max){
-		int dur = atoi(argv[2]);
-		tArg[count] = dur;
-		pthread_create(&tg[count], NULL, (void *)generateRequests, &tArg[count]);
-		count++;
-	}*/
 
-	/*int index = 0;
-	int n = 1;
-	while(n > 0){
-		process_t process;	
-		n = read(fd[1], &process,sizeof(process));
-		printInFile(&process,1);
-		if(n > 0){
-			pthread_create(&tr[index],NULL,(void *) receiveAnswers, &process);
-			index++;
-		}
-	}*/
-	
 	pthread_join(tg, NULL);
 	pthread_join(tr, NULL);
 
-	/*count = 0;
-	while(count < max){
-		pthread_join(tg[count], NULL);
-		count++;
-	}
-	int i = 0;
-	while(i < index){
-		pthread_join(tr[i], NULL);
-		i++;
-	}*/
-
 	printStatisticsInFile();
 	pthread_mutex_destroy(&lock);
-	sleep(4);
+
 	close(fd[0]);
-	close(fd[1]);
+	//close(fd[1]);
 
-	/*int t = fork();
-	if(t > 0){ //pai
-		close(fd[0]);
-	} 
-	else{
-		close(fd[1]);
-	}*/
-
-	
-	/*if (unlink("/tmp/entrada")<0)
-		printf("Error when destroying FIFO '/tmp/entrada'\n");
-	else
-		printf("FIFO '/tmp/entrada' has been destroyed\n"); 
-
-	if (unlink("/tmp/rejeitados")<0)
-		printf("Error when destroying FIFO '/tmp/rejeitados'\n");
-	else
-		printf("FIFO '/tmp/rejeitados' has been destroyed\n"); */
 	exit(0);
 }

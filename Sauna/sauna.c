@@ -21,9 +21,10 @@ int clientCount = 0;
 static int numMaxCli;
 char currGender = '\0';
 pthread_mutex_t lock;
-
+//STATISTICS VARIABLES
 int pedF = 0, pedM = 0, rejF = 0, rejM = 0, serF = 0, serM = 0;
 
+//STRUCT
 typedef struct Process{
 	int p;
 	char gender;
@@ -85,14 +86,18 @@ void printStatisticsInFile() {
 
 void * processRequests(void * pro){
 	process_t process = *((process_t *) pro);
+	pthread_mutex_lock(&lock);
 	printInFile(&process, 0);
+	pthread_mutex_unlock(&lock);
 	pthread_mutex_lock(&lock);
 	if(process.gender == 'F')
-			pedF++;
-		else
-			pedM++;
-		pthread_mutex_unlock(&lock);
+		pedF++;
+	else
+		pedM++;
+	pthread_mutex_unlock(&lock);
+	pthread_mutex_lock(&lock);
 	if(currGender == '\0'){
+		pthread_mutex_unlock(&lock);
 		pthread_mutex_lock(&lock);
 		clientCount++;
 		currGender = process.gender;
@@ -101,7 +106,11 @@ void * processRequests(void * pro){
 		else
 			serM++;
 		pthread_mutex_unlock(&lock);
+
+		pthread_mutex_lock(&lock);
 		printInFile(&process, 1);
+		pthread_mutex_unlock(&lock);
+
 		sleep(process.dur/1000);
 
 		pthread_mutex_lock(&lock);
@@ -113,6 +122,7 @@ void * processRequests(void * pro){
 		pthread_mutex_unlock(&lock);
 	}
 	else if((currGender == process.gender) && (clientCount != numMaxCli)){
+		pthread_mutex_unlock(&lock);
 		pthread_mutex_lock(&lock);
 		clientCount++;
 		if(process.gender == 'F')
@@ -121,7 +131,35 @@ void * processRequests(void * pro){
 			serM++;
 		pthread_mutex_unlock(&lock);
 
+		pthread_mutex_lock(&lock);
 		printInFile(&process, 1);
+		pthread_mutex_unlock(&lock);
+		sleep(process.dur/1000);
+
+		pthread_mutex_lock(&lock);
+		clientCount--;			
+		if(clientCount == 0)
+			currGender = '\0';
+		pthread_mutex_unlock(&lock);
+	}
+	else if((currGender == process.gender)){
+		pthread_mutex_unlock(&lock);
+		pthread_mutex_lock(&lock);
+		while(clientCount == numMaxCli){
+			pthread_mutex_unlock(&lock);
+			sleep(0.1);
+		}
+		pthread_mutex_lock(&lock);
+		clientCount++;
+		if(process.gender == 'F')
+			serF++;
+		else
+			serM++;
+		pthread_mutex_unlock(&lock);
+
+		pthread_mutex_lock(&lock);
+		printInFile(&process, 1);
+		pthread_mutex_unlock(&lock);
 		sleep(process.dur/1000);
 
 		pthread_mutex_lock(&lock);
@@ -131,7 +169,7 @@ void * processRequests(void * pro){
 		pthread_mutex_unlock(&lock);
 	}
 	else {
-		//send through FIFO
+		pthread_mutex_unlock(&lock);
 		process.rej++;
 		pthread_mutex_lock(&lock);
 		if(process.gender == 'F')
@@ -139,11 +177,12 @@ void * processRequests(void * pro){
 		else
 			rejM++;
 		pthread_mutex_unlock(&lock);
+
+		pthread_mutex_lock(&lock);
 		printInFile(&process, -1);
-		//printf("C: %d\n", process.p);
-		//openFIFOWrite();
+		pthread_mutex_unlock(&lock);
+
 		write(fd[1],&process, sizeof(process));
-		//close(fd[1]);
 	}
 	printf("PESSOAS: %d\n",clientCount);
 	return NULL;
@@ -166,10 +205,8 @@ int main(int argc, char const *argv[])
 
 	//FIFO READ
 	openFIFORead();
-
 	//FIFO WRITE
 	openFIFOWrite();
-
 
 	//MUTEX INITIALIZATION
 	if (pthread_mutex_init(&lock, NULL) != 0) {
@@ -177,48 +214,45 @@ int main(int argc, char const *argv[])
 		return 1;
 	}
 
-	//process_t process;
-	/*process_t *process = malloc(sizeof(process_t));
-	while(read(fd[0], process, sizeof(*process)) > 0){
-		//printf("%d - %c - %d\n", process.p, process.gender, process.dur);
-		pthread_create(&tid[count],NULL,(void *) processRequests, (void *) process);
-		count++;
-	}*/
-
 	//READ REQUEST
-	process_t process[2000];
 	int index = 0;
 	int n = 1;
-	while(n > 0){
+	process_t pro;
+	n = read(fd[0], &pro, sizeof(pro));
+	int number = 0;
+	if(pro.p == -1)
+		number = pro.dur;
+	while(number > 0){
 		//process_t process = malloc(sizeof(process_t));
-		n = read(fd[0], &process[index], sizeof(process_t));
-		if(n > 0){
-			pthread_create(&tid[index],NULL,(void *) processRequests, (void *) &process[index]);
+		process_t process;
+		n = read(fd[0], &process, sizeof(process));
+		printf("%d - %c - %d\n", process.p, process.gender, process.dur);
+		if(n > 0 && process.p != -1){
+			pthread_create(&tid[index],NULL,(void *) processRequests, (void *) &process);
 			count++;
 			index++;
 		}
+		number--;
 	}
+	process_t process;
+	process.p = -1;
+	process.gender = '\0';
+	process.dur = -1;
+	write(fd[1], &process, sizeof(process));
 
 	int c = 0;
 	while(c < count){
 		pthread_join(tid[count], NULL);
 		c++;
 	}
-
-	printStatisticsInFile();
-	pthread_mutex_destroy(&lock);
-
-	sleep(4);
+	
 	close(fd[0]);
 	close(fd[1]);
 
-	/*int t = fork();
-	if(t > 0){ //pai
-		close(fd[0]);
-	} 
-	else{
-		close(fd[1]);
-	}*/
+	pthread_mutex_lock(&lock);
+	printStatisticsInFile();
+	pthread_mutex_unlock(&lock);
+	pthread_mutex_destroy(&lock);
 
 	if (unlink("/tmp/rejeitados")<0)
 		printf("Error when destroying FIFO '/tmp/rejeitados'\n");
