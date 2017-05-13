@@ -10,6 +10,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <semaphore.h>
 
 
 int fd[2];
@@ -25,6 +26,7 @@ pthread_mutex_t lock;
 int pedF = 0, pedM = 0, rejF = 0, rejM = 0, serF = 0, serM = 0;
 
 int number = 0;
+sem_t *sem1;
 //int rejected = 0;
 
 //STRUCT
@@ -88,16 +90,40 @@ void printStatisticsInFile() {
 }
 
 void * processRequests(void * pro){
-	process_t process = *((process_t *) pro);
 	pthread_mutex_lock(&lock);
+	process_t process = *((process_t *) pro);
 	printInFile(&process, 0);
 	if(process.gender == 'F')
 		pedF++;
 	else
 		pedM++;
 	pthread_mutex_unlock(&lock);
-	pthread_mutex_lock(&lock);
-	if(currGender == '\0'){
+
+	if((currGender == process.gender) || (currGender == '\0')){
+		while(clientCount == numMaxCli){
+			sleep(0.1);
+		}
+		pthread_mutex_lock(&lock);
+		clientCount++;
+		currGender = process.gender;
+		if(process.gender == 'F')
+			serF++;
+		else
+			serM++;
+		printInFile(&process, 1);
+		pthread_mutex_unlock(&lock);
+
+		sleep(process.dur/1000);
+
+		pthread_mutex_lock(&lock);
+		clientCount--;		
+		if(clientCount == 0)
+			currGender = '\0';
+		pthread_mutex_unlock(&lock);
+	}
+	
+	/*if(currGender == '\0'){
+		pthread_mutex_lock(&lock);
 		clientCount++;
 		currGender = process.gender;
 		if(process.gender == 'F')
@@ -116,7 +142,7 @@ void * processRequests(void * pro){
 		pthread_mutex_unlock(&lock);
 	}
 	else if((currGender == process.gender) && (clientCount != numMaxCli)){
-		
+		pthread_mutex_lock(&lock);
 		clientCount++;
 		if(process.gender == 'F')
 			serF++;
@@ -134,7 +160,7 @@ void * processRequests(void * pro){
 		pthread_mutex_unlock(&lock);
 	}
 	else if((currGender == process.gender)){
-
+		pthread_mutex_lock(&lock);
 		while(clientCount == numMaxCli){
 			pthread_mutex_unlock(&lock);
 			sleep(0.1);
@@ -155,9 +181,9 @@ void * processRequests(void * pro){
 		if(clientCount == 0)
 			currGender = '\0';
 		pthread_mutex_unlock(&lock);
-	}
+	}*/
 	else {
-
+		pthread_mutex_lock(&lock);
 		process.rej++;
 		if(process.rej < 3)
 			number++;
@@ -201,24 +227,29 @@ int main(int argc, char const *argv[])
 		return 1;
 	}
 
+	//SEMAPHORE
+	sem1 = sem_open("/sem1",O_CREAT, 0600,0);
+	if(sem1 == SEM_FAILED){
+		fprintf(stderr, "Semaphore opening failed.\n");
+		return -1;
+	}
+
 	//READ REQUEST
 	int index = 0;
-	int n = 1;
-	process_t pro;
-	n = read(fd[0], &pro, sizeof(pro));
-	if(pro.p == -1)
-		number = pro.dur;
+	process_t process[1000];
+	read(fd[0], &process[0], sizeof(process_t));
+	if(process[0].p == -1)
+		number = process[0].dur;
+	index++;
 	while(number > 0){
-		//process_t process = malloc(sizeof(process_t));
-		process_t process;
-		n = read(fd[0], &process, sizeof(process));
-		printf("%d - %c - %d\n", process.p, process.gender, process.dur);
-		if(n > 0 && process.p != -1){
-			number--;
-			pthread_create(&tid[index],NULL,(void *) processRequests, (void *) &process);
-			count++;
-			index++;
-		}
+		pthread_mutex_lock(&lock);
+		number--;
+		read(fd[0], &process[index], sizeof(process_t));
+		pthread_mutex_unlock(&lock);
+		printf("%d - %c - %d\n", process[index].p, process[index].gender, process[index].dur);
+		pthread_create(&tid[index],NULL,(void *) processRequests, (void *) &process[index]);
+		count++;
+		index++;
 		printf("N: %d\n", number);
 	}
 	int c = 0;
@@ -226,20 +257,25 @@ int main(int argc, char const *argv[])
 		pthread_join(tid[count], NULL);
 		c++;
 	}
+	printf("PORRA\n");
 
-	process_t process;
-	process.p = -1;
-	process.gender = '\0';
-	process.dur = -1;
-	write(fd[1], &process, sizeof(process));
+	//pthread_mutex_lock(&lock);
+	printStatisticsInFile();
+	//pthread_mutex_unlock(&lock);
+
+	process[index].p = -1;
+	process[index].gender = '\0';
+	process[index].dur = -1;
+	write(fd[1], &process[index], sizeof(process_t));
 	
-	close(fd[0]);
+	
+	sem_wait(sem1);
+	printf("LEL\n");
+	//close(fd[0]);
 	close(fd[1]);
 
-	pthread_mutex_lock(&lock);
-	printStatisticsInFile();
-	pthread_mutex_unlock(&lock);
 	pthread_mutex_destroy(&lock);
+	sem_close(sem1);
 
 	if (unlink("/tmp/rejeitados")<0)
 		printf("Error when destroying FIFO '/tmp/rejeitados'\n");

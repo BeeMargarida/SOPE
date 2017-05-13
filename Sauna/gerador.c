@@ -10,6 +10,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <semaphore.h>
 
 unsigned int seed;
 static int p = 0;
@@ -21,6 +22,8 @@ int numRequests;
 int countRequests = 0;
 //STATISTICS VARIABLES
 int gerM = 0, gerF = 0, rejM = 0, rejF = 0, descM = 0, descF = 0;
+
+sem_t *sem1;
 
 typedef struct Process{
 	int p;
@@ -99,9 +102,6 @@ void * generateRequests(void * arg) {
 		makeRequest(&process, *((int *)arg));
 		printInFile(&process,0);
 		write(fd[0], &process, sizeof(process));
-		if(errno == EAGAIN){
-			printf("PIPE FULL\n");
-		}
 		pthread_mutex_lock(&lock);
 		countRequests++;
 		pthread_mutex_unlock(&lock);
@@ -111,7 +111,7 @@ void * generateRequests(void * arg) {
 
 void handleRejected(process_t *process){
 	pthread_mutex_lock(&lock);
-	if(process->rej >= 3){
+	if(process->rej == 3){
 		if(process->gender == 'F')
 			descF++;
 		else
@@ -130,15 +130,16 @@ void handleRejected(process_t *process){
 }
 
 void * receiveAnswers(void * arg){
-	int n = 1;
 	do{
 		process_t process;
-		n = read(fd[1], &process,sizeof(process));
+		read(fd[1], &process,sizeof(process));
 		printf("REJ: %d - %c - %d\n", process.p, process.gender, process.dur);
 		if(process.p == -1){
+			sem_post(sem1);
+			printf("FACKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK\n");
 			close(fd[0]);
-			close(fd[1]);
-			return NULL;
+			//close(fd[1]);
+			break;
 		}
 		handleRejected(&process);
 		printInFile(&process,1);	
@@ -170,6 +171,13 @@ int main(int argc, char const *argv[])
 		return 1;
 	}
 
+	//SEMAPHORE
+	sem1 = sem_open("/sem1",O_CREAT, 0600,0);
+	if(sem1 == SEM_FAILED){
+		fprintf(stderr, "Semaphore opening failed.\n");
+		return -1;
+	}
+
 	//THREADS
 	numRequests = atoi(argv[1]);
 	pthread_t tg, tr;
@@ -192,6 +200,7 @@ int main(int argc, char const *argv[])
 	pthread_join(tr, NULL);
 	/*close(fd[0]);
 	close(fd[1]);*/
+	sem_close(sem1);
 
 	printStatisticsInFile();
 	pthread_mutex_destroy(&lock);
