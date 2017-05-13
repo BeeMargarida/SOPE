@@ -131,22 +131,18 @@ void handleRejected(process_t *process){
 
 void * receiveAnswers(void * arg){
 	int n = 1;
-	int closeflag = 0;
 	do{
 		process_t process;
 		n = read(fd[1], &process,sizeof(process));
 		printf("REJ: %d - %c - %d\n", process.p, process.gender, process.dur);
 		if(process.p == -1){
-			closeflag = -1;
-			//close(fd[0]);
+			close(fd[0]);
 			close(fd[1]);
 			return NULL;
 		}
-		else if(n > 0){
-			handleRejected(&process);
-			printInFile(&process,1);
-		}	
-	} while(n > 0 && closeflag != -1);
+		handleRejected(&process);
+		printInFile(&process,1);	
+	} while(1);
 	return NULL;
 }
 
@@ -194,12 +190,11 @@ int main(int argc, char const *argv[])
 
 	pthread_join(tg, NULL);
 	pthread_join(tr, NULL);
+	/*close(fd[0]);
+	close(fd[1]);*/
 
 	printStatisticsInFile();
 	pthread_mutex_destroy(&lock);
-
-	close(fd[0]);
-	//close(fd[1]);
 
 	exit(0);
 }
