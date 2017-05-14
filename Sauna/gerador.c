@@ -10,20 +10,18 @@
 #include <time.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <semaphore.h>
 
-unsigned int seed;
-static int p = 0;
-pthread_mutex_t lock;
+int fd[2];
+pthread_t tid[2];
 struct timeval t1, t2;
 FILE *file;
-int fd[2];
-int numRequests;
-int countRequests = 0;
-//STATISTICS VARIABLES
-int gerM = 0, gerF = 0, rejM = 0, rejF = 0, descM = 0, descF = 0;
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-sem_t *sem1;
+unsigned int seed;
+int numMaxRequests;
+int p = 0;
+
+int gerM = 0, gerF = 0, rejM = 0, rejF = 0, descM = 0, descF = 0;
 
 typedef struct Process{
 	int p;
@@ -32,20 +30,39 @@ typedef struct Process{
 	int rej;
 } process_t;
 
-void openFIFOWrite() {
+
+int openFIFOWrite() {
+	if(mkfifo("/tmp/entrada",0660) < 0){
+		if(errno == EEXIST){
+			printf("FIFO '/tmp/entrada' exists already.\n");
+		}
+		else {
+			printf("Impossible to create FIFO.\n");
+			return -1;
+		}
+	}
 	do {
-		fd[0] = open("/tmp/entrada",O_WRONLY) ;
-		if(fd[0] == -1) sleep(1);
+		fd[0] = open("/tmp/entrada", O_WRONLY);	
 
 	} while(fd[0] == -1);
+	return 0;
 }
 
-void openFIFORead() {
+int openFIFORead() {
+	if(mkfifo("/tmp/rejeitados",0660) < 0){
+		if(errno == EEXIST){
+			printf("FIFO '/tmp/rejeitados' exists already.\n");
+		}
+		else {
+			printf("Impossible to create FIFO.\n");
+			return -1;
+		}
+	}
 	do {
-		fd[1] = open("/tmp/rejeitados",O_RDONLY/* | O_NONBLOCK*/) ;
-		if(fd[1] == -1) sleep(1);
+		fd[1] = open("/tmp/rejeitados", O_RDONLY);	
 
 	} while(fd[1] == -1);
+	return 0;
 }
 
 void printInFile(process_t *process, int state) {
@@ -87,30 +104,14 @@ void makeRequest(process_t *process, int num) {
 	process->gender = *gender;
 	process->dur = dur;
 	process->rej = 0;
-	pthread_mutex_lock(&lock);
 	if(process->gender == 'F')
 		gerF++;
 	else
 		gerM++;
 	p++;
-	pthread_mutex_unlock(&lock);
-}
-
-void * generateRequests(void * arg) {
-	while(countRequests < numRequests){
-		process_t process;
-		makeRequest(&process, *((int *)arg));
-		printInFile(&process,0);
-		write(fd[0], &process, sizeof(process));
-		pthread_mutex_lock(&lock);
-		countRequests++;
-		pthread_mutex_unlock(&lock);
-	}
-	return NULL;
 }
 
 void handleRejected(process_t *process){
-	pthread_mutex_lock(&lock);
 	if(process->rej == 3){
 		if(process->gender == 'F')
 			descF++;
@@ -124,80 +125,78 @@ void handleRejected(process_t *process){
 			rejF++;
 		else
 			rejM++;
+		printInFile(process,0);
 		write(fd[0],process,sizeof(*process));
 	}
-	pthread_mutex_unlock(&lock);
 }
 
-void * receiveAnswers(void * arg){
-	do{
-		process_t process;
-		read(fd[1], &process,sizeof(process));
-		printf("REJ: %d - %c - %d\n", process.p, process.gender, process.dur);
-		if(process.p == -1){
-			//sem_post(sem1);
-			printf("FACKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK\n");
-			/*close(fd[0]);
-			close(fd[1]);*/
+void * receiveAnswers(void * arg) {
+	do {
+		process_t *process = (process_t *) malloc(sizeof(process_t));
+		read(fd[1], process, sizeof(*process));
+		printf("REJ:%d - %c - %d\n", process->p, process->gender, process->dur);
+		if(process->p == -1){
+			printf("FODASSE!\n");
 			return NULL;
 		}
-		handleRejected(&process);
-		printInFile(&process,1);	
+		handleRejected(process);
+		printInFile(process,1);
 	} while(1);
+	return NULL;
+}
+
+
+void * generateRequests(void * arg){
+	int num = *((int *) arg);
+	int countRequests = 0;
+	while(countRequests < numMaxRequests){
+		process_t *process = (process_t *) malloc(sizeof(process_t));
+		makeRequest(process, num);
+		printInFile(process,0);
+		write(fd[0], process, sizeof(*process));
+		countRequests++;
+	}
 	return NULL;
 }
 
 int main(int argc, char const *argv[])
 {
-	//Get beggining time of the program
 	gettimeofday(&t1,NULL);
 	if(argc != 3){
-		fprintf(stderr,"Invalid number of arguments.\n");
-		return -1;
+		printf("Wrong number of arguments (3)\n");
+		exit(1);
 	}
 
-	//FILE TO KEEP INFORMATION
+	seed = time(NULL);
+
 	char filename[14];
 	sprintf(filename,"/tmp/ger.%d",getpid());
 	file = fopen(filename, "w");
 
-	//FIFO
 	openFIFOWrite();
 	openFIFORead();
 
-	//MUTEX INITIALIZATION
-	if (pthread_mutex_init(&lock, NULL) != 0) {
-		printf("Mutex init failed\n");
-		return 1;
-	}
+	numMaxRequests = atoi(argv[1]);
+	int maxDur[1];
+	maxDur[0] = atoi(argv[2]);
 
-	//THREADS
-	numRequests = atoi(argv[1]);
-	pthread_t tg, tr;
-	int tArg[1];
-	seed = time(NULL);
+	process_t *process = (process_t *)malloc(sizeof(process_t));
+	process->p = -1;
+	process->dur = numMaxRequests;
+	write(fd[0],process,sizeof(*process));
 
-	//THREADS
-	int dur = atoi(argv[2]);
-	tArg[0] = dur;
+	pthread_create(&tid[0],NULL,(void *) generateRequests, &maxDur[0]);
+	pthread_create(&tid[1],NULL,(void *) receiveAnswers, NULL);
 
-	process_t process;
-	process.p = -1;
-	process.dur = numRequests;
-	write(fd[0], &process, sizeof(process));
-	
-	pthread_create(&tg,NULL,(void *)generateRequests, &tArg[0]);
-	pthread_create(&tr,NULL,(void *)receiveAnswers, NULL);
+	pthread_join(tid[0],NULL);
+	pthread_join(tid[1],NULL);
 
-	pthread_join(tg, NULL);
-	pthread_join(tr, NULL);
+	printf("HEELLOO!\n");
+	close(fd[0]);
+	close(fd[1]);
 
 	printStatisticsInFile();
-	pthread_mutex_destroy(&lock);
 
-	close(fd[1]);
-	close(fd[0]);
-	
 	if (unlink("/tmp/rejeitados")<0)
 		printf("Error when destroying FIFO '/tmp/rejeitados'\n");
 	else
@@ -208,5 +207,7 @@ int main(int argc, char const *argv[])
 	else
 		printf("FIFO '/tmp/entrada' has been destroyed\n"); 
 
+
+	
 	exit(0);
 }
