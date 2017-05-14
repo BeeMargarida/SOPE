@@ -13,7 +13,7 @@
 
 int fd[2];
 pthread_t tid[2];
-struct timeval t1, t2;
+struct timespec start, end;
 FILE *file;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -66,20 +66,19 @@ int openFIFORead() {
 }
 
 void printInFile(process_t *process, int state) {
-	gettimeofday(&t2,NULL);
-	double elapsedTime = (t2.tv_sec - t1.tv_sec)*1000.00;
-	elapsedTime += (t2.tv_usec - t1.tv_usec);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+	double elapsedTime = (end.tv_sec - start.tv_sec) * 1000000.00 + (end.tv_nsec - start.tv_nsec) / 1000.00;
 	if(state == 0){
 		char *msg = "PEDIDO";
-		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d -  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 	else if(state == 1){
 		char *msg = "REJEITADO";
-		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d - %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 	else {
 		char *msg = "DESCARTADO";
-		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d - %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 }
 
@@ -161,7 +160,7 @@ void * generateRequests(void * arg){
 
 int main(int argc, char const *argv[])
 {
-	gettimeofday(&t1,NULL);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 	if(argc != 3){
 		printf("Wrong number of arguments (3)\n");
 		exit(1);
