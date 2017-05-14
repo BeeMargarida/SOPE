@@ -119,6 +119,10 @@ void * processRequests(void * arg){
 		pthread_mutex_unlock(&lock);
 	}
 	else {
+		pthread_mutex_lock(&lock);
+		printInFile(process,-1);
+		pthread_mutex_unlock(&lock);
+
 		process->rej++;
 		pthread_mutex_lock(&nlock);
 		if(process->rej < 3)
@@ -130,10 +134,6 @@ void * processRequests(void * arg){
 			rejF++;
 		else
 			rejM++;
-		pthread_mutex_unlock(&lock);
-
-		pthread_mutex_lock(&lock);
-		printInFile(process,-1);
 		pthread_mutex_unlock(&lock);
 
 		write(fd[1],process,sizeof(*process));
@@ -169,9 +169,9 @@ int main(int argc, char const *argv[])
 	while(number > 0) {
 		process_t *process = (process_t *)malloc(sizeof(process_t));
 		read(fd[0], process, sizeof(*process));
-		printf("%d - %c - %d\n", process->p, process->gender, process->dur);
 		pthread_create(&tid[i], NULL, (void * ) processRequests, process);
 		i++;
+		
 		pthread_mutex_lock(&nlock);
 		number--;
 		pthread_mutex_unlock(&nlock);
@@ -188,5 +188,7 @@ int main(int argc, char const *argv[])
 
 	printStatisticsInFile();
 
+	pthread_mutex_destroy(&lock);
+	pthread_mutex_destroy(&nlock);
 	exit(0);
 }

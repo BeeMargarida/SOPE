@@ -1,0 +1,6 @@
+Ana Margarida Oliveira Pinheiro da Silva	up201505505
+Danny de Almeida Soares						up201505509
+Diogo Leal da Silva Mota Pinto				up201404527
+
+
+Neste trabalho foram usados mutexes para combater situações de race condition, que podem ser observáveis na sauna.c.

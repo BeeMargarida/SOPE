@@ -15,7 +15,6 @@ int fd[2];
 pthread_t tid[2];
 struct timespec start, end;
 FILE *file;
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 unsigned int seed;
 int numMaxRequests;
@@ -89,6 +88,13 @@ void printStatisticsInFile() {
 	fprintf(file, "Discarded:\nTotal: %d\t F: %d\t M: %d\n", (descM+descF),descF,descM);
 }
 
+void printStatisticsInSTD() {
+    printf("\nSTATISTICS\n");
+    printf("Requests:\nTotal: %d\t F: %d\t M: %d\n", (gerM+gerF),gerF,gerM);
+    printf("Rejected:\nTotal: %d\t F: %d\t M: %d\n", (rejM+rejF),rejF,rejM);
+    printf("Discarded:\nTotal: %d\t F: %d\t M: %d\n", (descM+descF),descF,descM);
+}
+
 void makeRequest(process_t *process, int num) {
 	seed = seed + 1;
 	int dur = (rand_r(&seed) % num) + 1;
@@ -124,7 +130,6 @@ void handleRejected(process_t *process){
 			rejF++;
 		else
 			rejM++;
-		printInFile(process,0);
 		write(fd[0],process,sizeof(*process));
 	}
 }
@@ -133,9 +138,7 @@ void * receiveAnswers(void * arg) {
 	do {
 		process_t *process = (process_t *) malloc(sizeof(process_t));
 		read(fd[1], process, sizeof(*process));
-		printf("REJ:%d - %c - %d\n", process->p, process->gender, process->dur);
 		if(process->p == -1){
-			printf("FODASSE!\n");
 			return NULL;
 		}
 		handleRejected(process);
@@ -190,23 +193,21 @@ int main(int argc, char const *argv[])
 	pthread_join(tid[0],NULL);
 	pthread_join(tid[1],NULL);
 
-	printf("HEELLOO!\n");
 	close(fd[0]);
 	close(fd[1]);
 
 	printStatisticsInFile();
+	printStatisticsInSTD();
 
 	if (unlink("/tmp/rejeitados")<0)
-		printf("Error when destroying FIFO '/tmp/rejeitados'\n");
+		printf("\nError when destroying FIFO '/tmp/rejeitados'\n");
 	else
-		printf("FIFO '/tmp/rejeitados' has been destroyed\n"); 
+		printf("\nFIFO '/tmp/rejeitados' has been destroyed\n"); 
 
 	if (unlink("/tmp/entrada")<0)
 		printf("Error when destroying FIFO '/tmp/entrada'\n");
 	else
 		printf("FIFO '/tmp/entrada' has been destroyed\n"); 
 
-
-	
 	exit(0);
 }

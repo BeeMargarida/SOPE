@@ -1,0 +1,2 @@
+O comando de invocação do gerador consiste em ./gerador [num de pedidos a gerar] [maxima duração de utilizacao da sauna]
+
