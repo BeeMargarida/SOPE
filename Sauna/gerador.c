@@ -135,11 +135,11 @@ void * receiveAnswers(void * arg){
 		read(fd[1], &process,sizeof(process));
 		printf("REJ: %d - %c - %d\n", process.p, process.gender, process.dur);
 		if(process.p == -1){
-			sem_post(sem1);
+			//sem_post(sem1);
 			printf("FACKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK\n");
 			/*close(fd[0]);
 			close(fd[1]);*/
-			break;
+			return NULL;
 		}
 		handleRejected(&process);
 		printInFile(&process,1);	
@@ -171,13 +171,6 @@ int main(int argc, char const *argv[])
 		return 1;
 	}
 
-	//SEMAPHORE
-	sem1 = sem_open("/sem1",O_CREAT, 0600,0);
-	if(sem1 == SEM_FAILED){
-		fprintf(stderr, "Semaphore opening failed.\n");
-		return -1;
-	}
-
 	//THREADS
 	numRequests = atoi(argv[1]);
 	pthread_t tg, tr;
@@ -198,13 +191,22 @@ int main(int argc, char const *argv[])
 
 	pthread_join(tg, NULL);
 	pthread_join(tr, NULL);
-	sem_close(sem1);
 
 	printStatisticsInFile();
 	pthread_mutex_destroy(&lock);
 
-	close(fd[0]);
 	close(fd[1]);
+	close(fd[0]);
+	
+	if (unlink("/tmp/rejeitados")<0)
+		printf("Error when destroying FIFO '/tmp/rejeitados'\n");
+	else
+		printf("FIFO '/tmp/rejeitados' has been destroyed\n"); 
+
+	if (unlink("/tmp/entrada")<0)
+		printf("Error when destroying FIFO '/tmp/entrada'\n");
+	else
+		printf("FIFO '/tmp/entrada' has been destroyed\n"); 
 
 	exit(0);
 }

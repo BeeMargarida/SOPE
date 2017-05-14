@@ -16,8 +16,7 @@
 int fd[2];
 struct timeval t1, t2;
 FILE *file;
-pthread_t tid[2000];
-int count = 0;
+pthread_t tid[10000];
 int clientCount = 0;
 static int numMaxCli;
 char currGender = '\0';
@@ -45,8 +44,11 @@ void openFIFOWrite() {
 		else
 			printf("Impossible to create FIFO.\n");
 	}
-	if((fd[1] = open("/tmp/rejeitados",O_WRONLY)) == -1)
-		printf("Error opening the FIFO.\n");
+	/*if((fd[1] = open("/tmp/rejeitados",O_WRONLY | O_NONBLOCK)) == -1)
+		printf("Error opening the FIFO.\n");*/
+	while((fd[1] = open("/tmp/rejeitados",O_WRONLY | O_NONBLOCK)) == -1){
+		//printf("Error opening the FIFO.\n");
+	}
 }
 
 void openFIFORead() {
@@ -95,8 +97,11 @@ void * processRequests(void * pro){
 	else
 		pedM++;
 	pthread_mutex_unlock(&lock);
+
+	pthread_mutex_lock(&lock);
 	if((currGender == process.gender) || (currGender == '\0')){
-		while(clientCount == numMaxCli){
+		pthread_mutex_unlock(&lock);
+		while(clientCount == numMaxCli){	
 			sleep(0.1);
 		}
 		pthread_mutex_lock(&lock);
@@ -106,9 +111,7 @@ void * processRequests(void * pro){
 			serF++;
 		else
 			serM++;
-		printf("FOS1\n");
 		printInFile(&process, 1);
-		printf("AAAAUUUUUUUU\n");
 		pthread_mutex_unlock(&lock);
 		sleep(process.dur/1000);
 
@@ -119,6 +122,7 @@ void * processRequests(void * pro){
 		pthread_mutex_unlock(&lock);
 	}
 	else {
+		pthread_mutex_unlock(&lock);
 		pthread_mutex_lock(&lock);
 		process.rej++;
 		if(process.rej < 3)
@@ -128,9 +132,7 @@ void * processRequests(void * pro){
 			rejF++;
 		else
 			rejM++;
-		printf("FOS2\n");
 		printInFile(&process, -1);
-		printf("CARALHOOOOOOOOOOOOOOOOOO\n");
 
 		write(fd[1],&process, sizeof(process));
 		pthread_mutex_unlock(&lock);
@@ -166,15 +168,17 @@ int main(int argc, char const *argv[])
 	}
 
 	//SEMAPHORE
-	sem1 = sem_open("/sem1",O_CREAT, 0600,0);
+	/*sem1 = sem_open("/sem1",O_CREAT, 0600,0);
 	if(sem1 == SEM_FAILED){
 		fprintf(stderr, "Semaphore opening failed.\n");
 		return -1;
-	}
+	}*/
 
 	//READ REQUEST
 	int index = 0;
-	process_t process[1000];
+	int count = 0;
+
+	process_t process[10000];
 	read(fd[0], &process[0], sizeof(process_t));
 	if(process[0].p == -1)
 		number = process[0].dur;
@@ -182,20 +186,21 @@ int main(int argc, char const *argv[])
 	while(number > 0){
 		pthread_mutex_lock(&lock);
 		number--;
-		read(fd[0], &process[index], sizeof(process_t));
 		pthread_mutex_unlock(&lock);
+
+		read(fd[0], &process[index], sizeof(process_t));
 		printf("%d - %c - %d\n", process[index].p, process[index].gender, process[index].dur);
+
 		pthread_create(&tid[index],NULL,(void *) processRequests, (void *) &process[index]);
 		count++;
 		index++;
 		printf("N: %d\n", number);
 	}
-	int c = 0;
-	while(c < count){
-		pthread_join(tid[count], NULL);
+	int c = 1;
+	while(c <= count){
+		pthread_join(tid[c], NULL);
 		c++;
 	}
-	printf("PORRA\n");
 
 	//pthread_mutex_lock(&lock);
 	printStatisticsInFile();
@@ -204,29 +209,21 @@ int main(int argc, char const *argv[])
 	process[index].p = -1;
 	process[index].gender = '\0';
 	process[index].dur = -1;
-	write(fd[1], &process[index], sizeof(process_t));
-	
-	
+	int n = -1;
+	do {
+		printf("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n");
+		n = write(fd[1], &process[index], sizeof(process_t));
+	} while(n <= 0 && errno == EAGAIN);
+	//sem_post(sem1);
+	//sleep(2);
+
 	//sem_wait(sem1);
 	printf("LEL\n");
+	/*close(fd[0]);
+	close(fd[1]);*/
 	
-
+	//sem_close(sem1);
 	pthread_mutex_destroy(&lock);
-	
-	sem_wait(sem1);
-	close(fd[0]);
-	close(fd[1]);
-
-	if (unlink("/tmp/rejeitados")<0)
-		printf("Error when destroying FIFO '/tmp/rejeitados'\n");
-	else
-		printf("FIFO '/tmp/rejeitados' has been destroyed\n"); 
-
-	if (unlink("/tmp/entrada")<0)
-		printf("Error when destroying FIFO '/tmp/entrada'\n");
-	else
-		printf("FIFO '/tmp/entrada' has been destroyed\n"); 
-	
-	sem_close(sem1);
+	printf("LEKEKEJABNDIONBF\n");
 	exit(0);
 }
