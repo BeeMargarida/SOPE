@@ -67,18 +67,15 @@ void printInFile(process_t *process, int state) {
 	elapsedTime += (t2.tv_usec - t1.tv_usec);
 	if(state == 0){
 		char *msg = "RECEBIDO";
-		//char m[200];
-		//sprintf(m, "%.02f\t-\t%d\t-\t%d\t:\t%c\t-\t%d\t-\t%s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
-		//fprintf(file, "%-25s", m);
-		fprintf(file, "\t%.02f\t-\t%d\t-\t%d\t:\t%c\t-\t%d\t-\t%s\t\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 	else if(state == 1){
 		char *msg = "SERVIDO";
-		fprintf(file, "\t%.02f\t-\t%d\t-\t%d\t:\t%c\t-\t%d\t-\t%s\t\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 	else {
 		char *msg = "REJEITADO";
-		fprintf(file, "\t%.02f\t-\t%d\t-\t%d\t:\t%c\t-\t%d\t-\t%s\t\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 }
 
@@ -98,7 +95,6 @@ void * processRequests(void * pro){
 	else
 		pedM++;
 	pthread_mutex_unlock(&lock);
-
 	if((currGender == process.gender) || (currGender == '\0')){
 		while(clientCount == numMaxCli){
 			sleep(0.1);
@@ -110,9 +106,10 @@ void * processRequests(void * pro){
 			serF++;
 		else
 			serM++;
+		printf("FOS1\n");
 		printInFile(&process, 1);
+		printf("AAAAUUUUUUUU\n");
 		pthread_mutex_unlock(&lock);
-
 		sleep(process.dur/1000);
 
 		pthread_mutex_lock(&lock);
@@ -121,67 +118,6 @@ void * processRequests(void * pro){
 			currGender = '\0';
 		pthread_mutex_unlock(&lock);
 	}
-	
-	/*if(currGender == '\0'){
-		pthread_mutex_lock(&lock);
-		clientCount++;
-		currGender = process.gender;
-		if(process.gender == 'F')
-			serF++;
-		else
-			serM++;
-		printInFile(&process, 1);
-		pthread_mutex_unlock(&lock);
-
-		sleep(process.dur/1000);
-
-		pthread_mutex_lock(&lock);
-		clientCount--;		
-		if(clientCount == 0)
-			currGender = '\0';
-		pthread_mutex_unlock(&lock);
-	}
-	else if((currGender == process.gender) && (clientCount != numMaxCli)){
-		pthread_mutex_lock(&lock);
-		clientCount++;
-		if(process.gender == 'F')
-			serF++;
-		else
-			serM++;
-		printInFile(&process, 1);
-		pthread_mutex_unlock(&lock);
-
-		sleep(process.dur/1000);
-
-		pthread_mutex_lock(&lock);
-		clientCount--;			
-		if(clientCount == 0)
-			currGender = '\0';
-		pthread_mutex_unlock(&lock);
-	}
-	else if((currGender == process.gender)){
-		pthread_mutex_lock(&lock);
-		while(clientCount == numMaxCli){
-			pthread_mutex_unlock(&lock);
-			sleep(0.1);
-		}
-		pthread_mutex_lock(&lock);
-		clientCount++;
-		if(process.gender == 'F')
-			serF++;
-		else
-			serM++;
-		printInFile(&process, 1);
-		pthread_mutex_unlock(&lock);
-
-		sleep(process.dur/1000);
-
-		pthread_mutex_lock(&lock);
-		clientCount--;			
-		if(clientCount == 0)
-			currGender = '\0';
-		pthread_mutex_unlock(&lock);
-	}*/
 	else {
 		pthread_mutex_lock(&lock);
 		process.rej++;
@@ -192,7 +128,9 @@ void * processRequests(void * pro){
 			rejF++;
 		else
 			rejM++;
+		printf("FOS2\n");
 		printInFile(&process, -1);
+		printf("CARALHOOOOOOOOOOOOOOOOOO\n");
 
 		write(fd[1],&process, sizeof(process));
 		pthread_mutex_unlock(&lock);
@@ -269,13 +207,15 @@ int main(int argc, char const *argv[])
 	write(fd[1], &process[index], sizeof(process_t));
 	
 	
-	sem_wait(sem1);
+	//sem_wait(sem1);
 	printf("LEL\n");
-	//close(fd[0]);
-	close(fd[1]);
+	
 
 	pthread_mutex_destroy(&lock);
-	sem_close(sem1);
+	
+	sem_wait(sem1);
+	close(fd[0]);
+	close(fd[1]);
 
 	if (unlink("/tmp/rejeitados")<0)
 		printf("Error when destroying FIFO '/tmp/rejeitados'\n");
@@ -287,5 +227,6 @@ int main(int argc, char const *argv[])
 	else
 		printf("FIFO '/tmp/entrada' has been destroyed\n"); 
 	
+	sem_close(sem1);
 	exit(0);
 }

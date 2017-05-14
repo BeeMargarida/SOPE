@@ -54,15 +54,15 @@ void printInFile(process_t *process, int state) {
 	elapsedTime += (t2.tv_usec - t1.tv_usec);
 	if(state == 0){
 		char *msg = "PEDIDO";
-		fprintf(file, "%.02f - %d - %d: %c - %d - %s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 	else if(state == 1){
 		char *msg = "REJEITADO";
-		fprintf(file, "%.02f - %d - %d: %c - %d - %s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 	else {
 		char *msg = "DESCARTADO";
-		fprintf(file, "%.02f - %d - %d: %c - %d - %s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
+		fprintf(file, "%-10.02f - %6d  %-5d: %-3c - %-5d - %-12s\n", elapsedTime, getpid(), process->p, process->gender, process->dur, msg);
 	}
 }
 
@@ -137,8 +137,8 @@ void * receiveAnswers(void * arg){
 		if(process.p == -1){
 			sem_post(sem1);
 			printf("FACKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK\n");
-			close(fd[0]);
-			//close(fd[1]);
+			/*close(fd[0]);
+			close(fd[1]);*/
 			break;
 		}
 		handleRejected(&process);
@@ -198,12 +198,13 @@ int main(int argc, char const *argv[])
 
 	pthread_join(tg, NULL);
 	pthread_join(tr, NULL);
-	/*close(fd[0]);
-	close(fd[1]);*/
 	sem_close(sem1);
 
 	printStatisticsInFile();
 	pthread_mutex_destroy(&lock);
+
+	close(fd[0]);
+	close(fd[1]);
 
 	exit(0);
 }
